@@ -1,5 +1,6 @@
 use async_trait::async_trait;
-use mcp_core::{Tool, ToolProvider, ToolResult};
+use mcp_core::types::{Tool, CallToolResponse, ToolResponseContent, TextContent};
+// Adapt to latest MCP: we'll integrate via mcp-server Router separately
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -512,12 +513,16 @@ impl ToolProvider for DocxToolsProvider {
         all_tools
     }
 
-    async fn call_tool(&self, name: &str, arguments: Value) -> ToolResult {
+    async fn call_tool(&self, name: &str, arguments: Value) -> CallToolResponse {
         debug!("Calling tool: {} with arguments: {:?}", name, arguments);
         
         // Security check
         if let Err(security_error) = self.security.check_command(name, &arguments) {
-            return ToolResult::Error(format!("Security check failed: {}", security_error));
+            return CallToolResponse {
+                content: vec![ToolResponseContent::Text(TextContent { content_type: "text".into(), text: format!("Security check failed: {}", security_error), annotations: None })],
+                is_error: Some(true),
+                meta: None,
+            };
         }
         
         let result = match name {
@@ -815,7 +820,7 @@ impl ToolProvider for DocxToolsProvider {
                 let handler = self.handler.lock().unwrap();
                 let metadata = match handler.get_metadata(doc_id) {
                     Ok(m) => m,
-                    Err(e) => return ToolResult::Error(e.to_string()),
+                    Err(e) => return CallToolResponse { content: vec![ToolResponseContent::Text(TextContent { content_type: "text".into(), text: e.to_string(), annotations: None })], is_error: Some(true), meta: None },
                 };
                 
                 match self.converter.docx_to_pdf(&metadata.path, &PathBuf::from(output_path)) {
@@ -843,13 +848,13 @@ impl ToolProvider for DocxToolsProvider {
                 let handler = self.handler.lock().unwrap();
                 let metadata = match handler.get_metadata(doc_id) {
                     Ok(m) => m,
-                    Err(e) => return ToolResult::Error(e.to_string()),
+                    Err(e) => return CallToolResponse { content: vec![ToolResponseContent::Text(TextContent { content_type: "text".into(), text: e.to_string(), annotations: None })], is_error: Some(true), meta: None },
                 };
                 
                 let image_format = match format {
-                    "jpg" | "jpeg" => image::ImageFormat::Jpeg,
-                    "png" => image::ImageFormat::Png,
-                    _ => image::ImageFormat::Png,
+                    "jpg" | "jpeg" => ::image::ImageFormat::Jpeg,
+                    "png" => ::image::ImageFormat::Png,
+                    _ => ::image::ImageFormat::Png,
                 };
                 
                 match self.converter.docx_to_images(
@@ -1086,6 +1091,6 @@ impl ToolProvider for DocxToolsProvider {
             }
         };
         
-        ToolResult::Success(result)
+        CallToolResponse { content: vec![ToolResponseContent::Text(TextContent { content_type: "text".into(), text: result.to_string(), annotations: None })], is_error: None, meta: None }
     }
 }

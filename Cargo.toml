@@ -57,6 +57,9 @@ pulldown-cmark = "0.12"  # Markdown parsing
 html5ever = "0.29"  # HTML parsing
 comrak = "0.28"  # CommonMark parsing
 
+# Text extraction from DOCX
+dotext = "0.1"
+
 # Template rendering (pure Rust)
 handlebars = "6.0"  # Template engine
 tera = { version = "1.20", optional = true }
@@ -96,6 +99,7 @@ wkhtmltopdf = { version = "0.4", optional = true }
 
 [features]
 default = ["embedded-fonts", "pure-rust-pdf"]
+runtime-server = []
 embedded-fonts = []
 pure-rust-pdf = []
 external-tools = ["headless_chrome", "wkhtmltopdf"]

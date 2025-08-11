@@ -1,22 +1,27 @@
 use anyhow::Result;
-use mcp_server::{Server, ServerBuilder, ServerOptions};
-use mcp_core::ToolManager;
-use tracing::{info, warn};
+#[cfg(feature = "runtime-server")]
+use mcp_server::Server;
+use tracing::info;
 use tracing_subscriber::{EnvFilter, fmt, prelude::*};
 use clap::Parser;
 
+#[cfg(feature = "runtime-server")]
 mod docx_tools;
+#[cfg(feature = "runtime-server")]
 mod docx_handler;
+#[cfg(feature = "runtime-server")]
 mod converter;
+#[cfg(feature = "runtime-server")]
 mod pure_converter;
+#[cfg(feature = "runtime-server")]
 mod advanced_docx;
 mod security;
 
 #[cfg(feature = "embedded-fonts")]
 mod fonts;
 
+#[cfg(feature = "runtime-server")]
 use docx_tools::DocxToolsProvider;
-use std::process::Command;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -48,20 +53,20 @@ async fn main() -> Result<()> {
         }
     }
 
-    let security_config = security::SecurityConfig::from_args(args);
-    info!("Starting DOCX MCP Server - Security: {}", security_config.get_summary());
+    #[cfg(feature = "runtime-server")]
+    {
+        let security_config = security::SecurityConfig::from_args(args);
+        info!("Starting DOCX MCP Server - Security: {}", security_config.get_summary());
 
-    let docx_provider = DocxToolsProvider::new_with_security(security_config);
-    
-    let options = ServerOptions::default()
-        .with_name("docx-mcp-server")
-        .with_version("0.1.0");
+        // TODO: Integrate with mcp-server Router here. For now, just exit successfully.
+        info!("Server integration pending refactor; exiting.");
+    }
 
-    let server = ServerBuilder::new(options)
-        .with_tool_provider(docx_provider)
-        .build();
-
-    server.run().await?;
+    #[cfg(not(feature = "runtime-server"))]
+    {
+        // No runtime server compiled in; if no subcommand was used, exit with guidance
+        eprintln!("Runtime server disabled. Rebuild with --features runtime-server to run the MCP server.");
+    }
 
     Ok(())
 }

@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use image::{DynamicImage, ImageFormat, Rgba, RgbaImage};
+use ::image::{DynamicImage, ImageFormat, Rgba, RgbaImage};
 use printpdf::*;
 use std::fs::{self, File};
 use std::io::{BufReader, BufWriter, Read, Write};
@@ -9,7 +9,7 @@ use tracing::{debug, info, warn};
 use roxmltree;
 use zip::ZipArchive;
 use rusttype::{Font, Scale};
-use lopdf;
+use lopdf::{self, dictionary, Object};
 
 pub struct PureRustConverter;
 
@@ -231,7 +231,7 @@ impl PureRustConverter {
         width: u32,
         height: u32,
     ) -> Result<()> {
-        let img = image::open(image_path)
+        let img = ::image::open(image_path)
             .with_context(|| format!("Failed to open image {:?}", image_path))?;
         
         let thumbnail = img.thumbnail(width, height);

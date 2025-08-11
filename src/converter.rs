@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
-use image::{DynamicImage, ImageFormat, Rgba, RgbaImage};
+use ::image::{DynamicImage, ImageFormat, Rgba, RgbaImage};
 use printpdf::*;
+use lopdf::{self, dictionary, Object, ObjectId, Document as LoDocument};
 use std::fs::{self, File};
 use std::io::{BufWriter, Read, Write};
 use std::path::{Path, PathBuf};
@@ -108,9 +109,13 @@ impl DocumentConverter {
     }
 
     fn basic_docx_to_pdf(&self, docx_path: &Path, pdf_path: &Path) -> Result<()> {
-        // Extract text from DOCX
-        let text = dotext::extract_text(docx_path)
-            .with_context(|| format!("Failed to extract text from {:?}", docx_path))?;
+        // Extract text from DOCX (fallback using dotext)
+        let mut reader = dotext::Docx::open(docx_path)
+            .with_context(|| format!("Failed to open DOCX {:?}", docx_path))?;
+        let mut data = String::new();
+        use std::io::Read as _;
+        reader.read_to_string(&mut data)?;
+        let text = data;
         
         // Create a basic PDF with the extracted text
         let (doc, page1, layer1) = PdfDocument::new("Document", Mm(210.0), Mm(297.0), "Layer 1");
@@ -120,7 +125,7 @@ impl DocumentConverter {
         let font = doc.add_builtin_font(BuiltinFont::Helvetica)?;
         
         // Split text into lines and add to PDF
-        let lines: Vec<&str> = text.text.lines().collect();
+        let lines: Vec<&str> = text.lines().collect();
         let mut y_position = Mm(280.0);
         let line_height = Mm(5.0);
         
@@ -344,7 +349,7 @@ impl DocumentConverter {
         width: u32,
         height: u32,
     ) -> Result<()> {
-        let img = image::open(image_path)
+        let img = ::image::open(image_path)
             .with_context(|| format!("Failed to open image {:?}", image_path))?;
         
         let thumbnail = img.thumbnail(width, height);
@@ -390,13 +395,11 @@ impl DocumentConverter {
     }
 
     fn merge_pdfs_with_lopdf(&self, pdf_paths: &[PathBuf], output_path: &Path) -> Result<()> {
-        use lopdf::{Document, Object, ObjectId};
-        
-        let mut merged = Document::new();
+        let mut merged = LoDocument::new();
         merged.version = "1.5".to_string();
         
         for pdf_path in pdf_paths {
-            let mut doc = Document::load(pdf_path)?;
+            let mut doc = LoDocument::load(pdf_path)?;
             
             // Merge pages
             for page_id in doc.get_pages().values() {
@@ -409,16 +412,14 @@ impl DocumentConverter {
     }
 
     pub fn split_pdf(&self, pdf_path: &Path, output_dir: &Path) -> Result<Vec<PathBuf>> {
-        use lopdf::Document;
-        
         fs::create_dir_all(output_dir)?;
         
-        let doc = Document::load(pdf_path)?;
+        let doc = LoDocument::load(pdf_path)?;
         let pages = doc.get_pages();
         let mut output_paths = Vec::new();
         
         for (i, (_, page_id)) in pages.iter().enumerate() {
-            let mut single_page = Document::new();
+            let mut single_page = LoDocument::new();
             single_page.version = doc.version.clone();
             
             // Clone the page to the new document
