@@ -361,30 +361,30 @@ impl SecurityConfig {
     
     /// Get a summary of current security settings
     pub fn get_summary(&self) -> String {
-        let mut summary = Vec::new();
+        let mut summary: Vec<String> = Vec::new();
         
         if self.readonly_mode {
-            summary.push("📖 READONLY MODE");
+            summary.push("📖 READONLY MODE".to_string());
         }
         
         if self.sandbox_mode {
-            summary.push("🔒 SANDBOX MODE");
+            summary.push("🔒 SANDBOX MODE".to_string());
         }
         
         if let Some(ref whitelist) = self.command_whitelist {
-            summary.push(&format!("✅ Whitelist: {} commands", whitelist.len()));
+            summary.push(format!("✅ Whitelist: {} commands", whitelist.len()));
         }
         
         if let Some(ref blacklist) = self.command_blacklist {
-            summary.push(&format!("🚫 Blacklist: {} commands", blacklist.len()));
+            summary.push(format!("🚫 Blacklist: {} commands", blacklist.len()));
         }
         
         if !self.allow_external_tools {
-            summary.push("🔧 No external tools");
+            summary.push("🔧 No external tools".to_string());
         }
         
         if !self.allow_network {
-            summary.push("🌐 No network access");
+            summary.push("🌐 No network access".to_string());
         }
         
         if summary.is_empty() {

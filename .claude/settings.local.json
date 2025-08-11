@@ -2,7 +2,11 @@
   "permissions": {
     "allow": [
       "Bash(chmod:*)",
-      "Bash(cargo build:*)"
+      "Bash(cargo build:*)",
+      "Bash(rustc:*)",
+      "Bash(cargo check:*)",
+      "Bash(git push:*)",
+      "Bash(rm:*)"
     ],
     "deny": []
   }
