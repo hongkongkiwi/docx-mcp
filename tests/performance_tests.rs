@@ -17,7 +17,7 @@ const STRESS_TEST_ITERATIONS: usize = 100;
 #[test]
 fn test_large_document_performance() -> Result<()> {
     let temp_dir = TempDir::new().unwrap();
-    let mut handler = DocxHandler::new().unwrap();
+    let mut handler = DocxHandler::new_with_base_dir(temp_dir.path()).unwrap();
     
     let start = Instant::now();
     let doc_id = handler.create_document().unwrap();
@@ -104,7 +104,7 @@ fn test_concurrent_document_stress() -> Result<()> {
         let results = Arc::clone(&results);
         
         thread::spawn(move || -> Result<()> {
-            let mut handler = DocxHandler::new()?;
+            let mut handler = DocxHandler::new_with_base_dir(&*temp_path)?;
             let mut local_results = Vec::new();
             
             for op_id in 0..operations_per_thread {
@@ -181,7 +181,7 @@ fn test_concurrent_document_stress() -> Result<()> {
 #[test]
 fn test_memory_intensive_operations() -> Result<()> {
     let temp_dir = TempDir::new().unwrap();
-    let mut handler = DocxHandler::new().unwrap();
+    let mut handler = DocxHandler::new_with_base_dir(temp_dir.path()).unwrap();
     
     let mut doc_ids = Vec::new();
     
@@ -256,9 +256,7 @@ fn test_memory_intensive_operations() -> Result<()> {
 #[test]
 fn test_mcp_tool_performance() -> Result<()> {
     let temp_dir = TempDir::new().unwrap();
-    std::env::set_var("DOCX_MCP_TEMP", temp_dir.path());
-    
-    let provider = DocxToolsProvider::new();
+    let provider = DocxToolsProvider::with_base_dir(temp_dir.path());
     let mut operation_times = Vec::new();
     
     // Test document creation performance
@@ -385,10 +383,9 @@ fn test_mcp_tool_performance() -> Result<()> {
 #[test]
 fn test_security_overhead_performance() -> Result<()> {
     let temp_dir = TempDir::new().unwrap();
-    std::env::set_var("DOCX_MCP_TEMP", temp_dir.path());
     
     // Test with default (permissive) security
-    let default_provider = DocxToolsProvider::new();
+    let default_provider = DocxToolsProvider::with_base_dir(temp_dir.path());
     
     // Test with restrictive security
     let restrictive_config = SecurityConfig {
@@ -400,7 +397,7 @@ fn test_security_overhead_performance() -> Result<()> {
         allow_network: false,
         ..Default::default()
     };
-    let restrictive_provider = DocxToolsProvider::new_with_security(restrictive_config);
+    let restrictive_provider = DocxToolsProvider::with_base_dir_and_security(temp_dir.path(), restrictive_config);
     
     let operations = vec![
         ("list_documents", json!({})),
@@ -442,7 +439,7 @@ fn test_conversion_performance_scaling() -> Result<()> {
     let mut performance_data = Vec::new();
     
     for &size in &document_sizes {
-        let mut handler = DocxHandler::new()?;
+        let mut handler = DocxHandler::new_with_base_dir(temp_dir.path())?;
         let doc_id = handler.create_document()?;
         
         // Create document with specified number of paragraphs
@@ -501,9 +498,7 @@ fn test_conversion_performance_scaling() -> Result<()> {
 #[test]
 fn test_error_handling_performance() -> Result<()> {
     let temp_dir = TempDir::new().unwrap();
-    std::env::set_var("DOCX_MCP_TEMP", temp_dir.path());
-    
-    let provider = DocxToolsProvider::new();
+    let provider = DocxToolsProvider::with_base_dir(temp_dir.path());
     let error_operations = vec![
         ("extract_text", json!({"document_id": "nonexistent"})),
         ("add_paragraph", json!({"document_id": "fake", "text": "test"})),
@@ -535,7 +530,7 @@ fn test_error_handling_performance() -> Result<()> {
 #[test]
 fn test_resource_cleanup_performance() -> Result<()> {
     let temp_dir = TempDir::new().unwrap();
-    let mut handler = DocxHandler::new()?;
+    let mut handler = DocxHandler::new_with_base_dir(temp_dir.path())?;
     
     let document_count = 50;
     let mut doc_ids = Vec::new();

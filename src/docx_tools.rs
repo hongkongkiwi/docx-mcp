@@ -36,6 +36,23 @@ impl DocxToolsProvider {
             security_config,
         }
     }
+
+    /// Create a provider that stores temporary documents under the provided base directory
+    pub fn with_base_dir<P: AsRef<std::path::Path>>(base_dir: P) -> Self {
+        Self::with_base_dir_and_security(base_dir, SecurityConfig::default())
+    }
+
+    /// Create a provider with a base directory and explicit security config
+    pub fn with_base_dir_and_security<P: AsRef<std::path::Path>>(base_dir: P, security_config: SecurityConfig) -> Self {
+        Self {
+            handler: Arc::new(Mutex::new(DocxHandler::new_with_base_dir(base_dir).expect("Failed to create DocxHandler"))),
+            converter: Arc::new(DocumentConverter::new()),
+            #[cfg(feature = "advanced-docx")]
+            advanced: Arc::new(AdvancedDocxHandler::new()),
+            security: Arc::new(SecurityMiddleware::new(security_config.clone())),
+            security_config,
+        }
+    }
 }
 
 impl DocxToolsProvider {

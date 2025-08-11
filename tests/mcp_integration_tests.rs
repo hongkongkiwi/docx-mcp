@@ -26,18 +26,13 @@ async fn tool_result(provider: &DocxToolsProvider, name: &str, args: serde_json:
 
 async fn create_test_provider() -> (DocxToolsProvider, TempDir) {
     let temp_dir = TempDir::new().unwrap();
-    // Ensure our handler uses this path for its own temp files
-    std::env::set_var("DOCX_MCP_TEMP", temp_dir.path());
-    
-    let provider = DocxToolsProvider::new();
+    let provider = DocxToolsProvider::with_base_dir(temp_dir.path());
     (provider, temp_dir)
 }
 
 async fn create_test_provider_with_security(config: SecurityConfig) -> (DocxToolsProvider, TempDir) {
     let temp_dir = TempDir::new().unwrap();
-    std::env::set_var("DOCX_MCP_TEMP", temp_dir.path());
-    
-    let provider = DocxToolsProvider::new_with_security(config);
+    let provider = DocxToolsProvider::with_base_dir_and_security(temp_dir.path(), config);
     (provider, temp_dir)
 }
 

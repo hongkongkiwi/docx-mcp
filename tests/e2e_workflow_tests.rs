@@ -34,9 +34,7 @@ async fn tool_result(provider: &DocxToolsProvider, name: &str, args: Value) -> T
 #[tokio::test]
 async fn test_complete_document_workflow() -> Result<()> {
     let temp_dir = TempDir::new().unwrap();
-    std::env::set_var("DOCX_MCP_TEMP", temp_dir.path());
-    
-    let provider = DocxToolsProvider::new();
+    let provider = DocxToolsProvider::with_base_dir(temp_dir.path());
     
     // Step 1: Create a new document
     let create_result = tool_result(&provider, "create_document", json!({})).await;
@@ -234,9 +232,7 @@ async fn test_complete_document_workflow() -> Result<()> {
 #[tokio::test]
 async fn test_document_editing_workflow() -> Result<()> {
     let temp_dir = TempDir::new().unwrap();
-    std::env::set_var("DOCX_MCP_TEMP", temp_dir.path());
-    
-    let provider = DocxToolsProvider::new();
+    let provider = DocxToolsProvider::with_base_dir(temp_dir.path());
     
     // Create initial document
     let create_result = tool_result(&provider, "create_document", json!({})).await;
@@ -424,9 +420,7 @@ async fn test_document_editing_workflow() -> Result<()> {
 #[tokio::test]
 async fn test_collaborative_workflow() -> Result<()> {
     let temp_dir = TempDir::new().unwrap();
-    std::env::set_var("DOCX_MCP_TEMP", temp_dir.path());
-    
-    let provider = DocxToolsProvider::new();
+    let provider = DocxToolsProvider::with_base_dir(temp_dir.path());
     let mut document_ids = Vec::new();
     
     // Simulate multiple team members creating documents
@@ -642,8 +636,6 @@ async fn test_collaborative_workflow() -> Result<()> {
 #[tokio::test]
 async fn test_security_restricted_workflow() -> Result<()> {
     let temp_dir = TempDir::new().unwrap();
-    std::env::set_var("DOCX_MCP_TEMP", temp_dir.path());
-    
     // Create a restrictive security configuration
     let mut whitelist = HashSet::new();
     whitelist.insert("open_document".to_string());
@@ -665,7 +657,7 @@ async fn test_security_restricted_workflow() -> Result<()> {
         allow_network: false,
     };
     
-    let provider = DocxToolsProvider::new_with_security(security_config);
+    let provider = DocxToolsProvider::with_base_dir_and_security(temp_dir.path(), security_config);
     
     // Test security info
     let security_info = tool_result(&provider, "get_security_info", json!({})).await;
@@ -855,9 +847,7 @@ async fn test_security_restricted_workflow() -> Result<()> {
 #[tokio::test]
 async fn test_error_recovery_workflow() -> Result<()> {
     let temp_dir = TempDir::new().unwrap();
-    std::env::set_var("DOCX_MCP_TEMP", temp_dir.path());
-    
-    let provider = DocxToolsProvider::new();
+    let provider = DocxToolsProvider::with_base_dir(temp_dir.path());
     
     // Test recovery from invalid document ID
     let invalid_ops = vec![

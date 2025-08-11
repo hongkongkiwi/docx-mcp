@@ -70,6 +70,17 @@ impl DocxHandler {
         })
     }
 
+    /// Create a handler that stores temporary documents under the provided base directory
+    pub fn new_with_base_dir<P: AsRef<Path>>(base_dir: P) -> Result<Self> {
+        let temp_dir = base_dir.as_ref().join("docx-mcp");
+        fs::create_dir_all(&temp_dir)?;
+        Ok(Self {
+            temp_dir,
+            documents: std::collections::HashMap::new(),
+            in_memory_ops: std::collections::HashMap::new(),
+        })
+    }
+
     #[cfg(test)]
     pub fn new_with_temp_dir(temp_dir: &Path) -> Result<Self> {
         let temp_dir = temp_dir.to_path_buf();
