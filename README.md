@@ -60,8 +60,13 @@ The server includes comprehensive security features for enterprise and restricte
 ### Readonly Mode
 ```bash
 # Enable readonly mode - only allows document viewing and analysis
+
+# Using environment variables
 export DOCX_MCP_READONLY=true
 ./target/release/docx-mcp
+
+# Using command line arguments
+./target/release/docx-mcp --readonly
 ```
 
 In readonly mode, only these operations are allowed:
@@ -74,32 +79,51 @@ In readonly mode, only these operations are allowed:
 ### Command Filtering
 ```bash
 # Whitelist specific commands only
+
+# Using environment variables
 export DOCX_MCP_WHITELIST="open_document,extract_text,get_metadata,export_to_markdown"
 
+# Using command line arguments
+./target/release/docx-mcp --whitelist open_document,extract_text,get_metadata,export_to_markdown
+
 # Or blacklist dangerous commands
+
+# Using environment variables
 export DOCX_MCP_BLACKLIST="save_document,convert_to_pdf,merge_documents"
+
+# Using command line arguments
+./target/release/docx-mcp --blacklist save_document,convert_to_pdf,merge_documents
 ```
 
 ### Sandbox Mode
 ```bash
 # Restrict all file operations to temp directory only
+
+# Using environment variables
 export DOCX_MCP_SANDBOX=true
 ./target/release/docx-mcp
+
+# Using command line arguments
+./target/release/docx-mcp --sandbox
 ```
 
 ### Resource Limits
 ```bash
 # Set maximum document size (100MB default)
+
+# Using environment variables
 export DOCX_MCP_MAX_SIZE=52428800  # 50MB
-
-# Set maximum number of open documents
 export DOCX_MCP_MAX_DOCS=20
-
-# Disable external tools
 export DOCX_MCP_NO_EXTERNAL_TOOLS=true
-
-# Disable network operations
 export DOCX_MCP_NO_NETWORK=true
+./target/release/docx-mcp
+
+# Using command line arguments
+./target/release/docx-mcp \
+  --max-size 52428800 \
+  --max-docs 20 \
+  --no-external-tools \
+  --no-network
 ```
 
 ## 🤖 AI Tool Integration
@@ -125,6 +149,39 @@ Add to your Claude Desktop configuration file:
 }
 ```
 
+**With Security Options (using command-line arguments):**
+```json
+{
+  "mcpServers": {
+    "docx": {
+      "command": "/absolute/path/to/docx-mcp/target/release/docx-mcp",
+      "args": ["--readonly", "--max-size", "52428800", "--no-network"],
+      "env": {
+        "RUST_LOG": "info"
+      }
+    }
+  }
+}
+```
+
+**With Security Options (using environment variables):**
+```json
+{
+  "mcpServers": {
+    "docx": {
+      "command": "/absolute/path/to/docx-mcp/target/release/docx-mcp",
+      "args": [],
+      "env": {
+        "RUST_LOG": "info",
+        "DOCX_MCP_READONLY": "true",
+        "DOCX_MCP_MAX_SIZE": "52428800",
+        "DOCX_MCP_NO_NETWORK": "true"
+      }
+    }
+  }
+}
+```
+
 After adding, restart Claude Desktop. You can then ask Claude to:
 - "Create a new Word document with our Q4 report"
 - "Convert this DOCX file to PDF"
@@ -135,6 +192,7 @@ After adding, restart Claude Desktop. You can then ask Claude to:
 
 Add to your Cursor settings (`~/.cursor/config.json` or through Settings UI):
 
+**Basic Configuration:**
 ```json
 {
   "mcp": {
@@ -151,10 +209,24 @@ Add to your Cursor settings (`~/.cursor/config.json` or through Settings UI):
 }
 ```
 
-### Windsurf (Codeium)
+**With Security Options (using command-line arguments):**
+```json
+{
+  "mcp": {
+    "servers": {
+      "docx": {
+        "command": "/absolute/path/to/docx-mcp/target/release/docx-mcp",
+        "args": ["--sandbox", "--whitelist", "open_document,extract_text,export_to_markdown"],
+        "env": {
+          "RUST_LOG": "info"
+        }
+      }
+    }
+  }
+}
+```
 
-Add to your Windsurf configuration (`~/.windsurf/config.json`):
-
+**With Security Options (using environment variables):**
 ```json
 {
   "mcp": {
@@ -162,6 +234,46 @@ Add to your Windsurf configuration (`~/.windsurf/config.json`):
       "docx": {
         "command": "/absolute/path/to/docx-mcp/target/release/docx-mcp",
         "args": [],
+        "env": {
+          "RUST_LOG": "info",
+          "DOCX_MCP_SANDBOX": "true",
+          "DOCX_MCP_WHITELIST": "open_document,extract_text,export_to_markdown"
+        }
+      }
+    }
+  }
+}
+```
+
+### Windsurf (Codeium)
+
+Add to your Windsurf configuration (`~/.windsurf/config.json`):
+
+**Basic Configuration:**
+```json
+{
+  "mcp": {
+    "servers": {
+      "docx": {
+        "command": "/absolute/path/to/docx-mcp/target/release/docx-mcp",
+        "args": [],
+        "env": {
+          "RUST_LOG": "info"
+        }
+      }
+    }
+  }
+}
+```
+
+**With Security Options (using arguments):**
+```json
+{
+  "mcp": {
+    "servers": {
+      "docx": {
+        "command": "/absolute/path/to/docx-mcp/target/release/docx-mcp",
+        "args": ["--readonly", "--no-external-tools"],
         "env": {
           "RUST_LOG": "info"
         }
@@ -175,6 +287,7 @@ Add to your Windsurf configuration (`~/.windsurf/config.json`):
 
 Add to your Continue configuration (`~/.continue/config.json`):
 
+**Basic Configuration:**
 ```json
 {
   "models": [
@@ -192,10 +305,29 @@ Add to your Continue configuration (`~/.continue/config.json`):
 }
 ```
 
+**With Security Options:**
+```json
+{
+  "models": [
+    {
+      "title": "Your Model",
+      "provider": "your-provider",
+      "mcp_servers": {
+        "docx": {
+          "command": "/absolute/path/to/docx-mcp/target/release/docx-mcp",
+          "args": ["--sandbox", "--max-size", "10485760"]
+        }
+      }
+    }
+  ]
+}
+```
+
 ### VS Code with MCP Extension
 
 If using the MCP extension for VS Code, add to your workspace settings (`.vscode/settings.json`):
 
+**Basic Configuration:**
 ```json
 {
   "mcp.servers": {
@@ -209,6 +341,67 @@ If using the MCP extension for VS Code, add to your workspace settings (`.vscode
   }
 }
 ```
+
+**With Security Options:**
+```json
+{
+  "mcp.servers": {
+    "docx": {
+      "command": "/absolute/path/to/docx-mcp/target/release/docx-mcp",
+      "args": ["--readonly", "--blacklist", "save_document,merge_documents"],
+      "env": {
+        "RUST_LOG": "info"
+      }
+    }
+  }
+}
+```
+
+## 🔧 Command Line Arguments
+
+The DOCX MCP server supports the following command-line arguments for configuration:
+
+```bash
+docx-mcp --help
+```
+
+### Available Arguments
+
+| Argument | Environment Variable | Description | Example |
+|----------|---------------------|-------------|---------|
+| `--readonly` | `DOCX_MCP_READONLY=true` | Enable readonly mode - only viewing operations | `--readonly` |
+| `--whitelist <COMMANDS>` | `DOCX_MCP_WHITELIST` | Comma-separated list of allowed commands | `--whitelist open_document,extract_text` |
+| `--blacklist <COMMANDS>` | `DOCX_MCP_BLACKLIST` | Comma-separated list of forbidden commands | `--blacklist save_document,convert_to_pdf` |
+| `--sandbox` | `DOCX_MCP_SANDBOX=true` | Restrict file operations to temp directory only | `--sandbox` |
+| `--no-external-tools` | `DOCX_MCP_NO_EXTERNAL_TOOLS=true` | Disable external tools (LibreOffice, etc.) | `--no-external-tools` |
+| `--no-network` | `DOCX_MCP_NO_NETWORK=true` | Disable network operations | `--no-network` |
+| `--max-size <BYTES>` | `DOCX_MCP_MAX_SIZE` | Maximum document size in bytes | `--max-size 52428800` |
+| `--max-docs <COUNT>` | `DOCX_MCP_MAX_DOCS` | Maximum number of open documents | `--max-docs 20` |
+| `--help` | - | Show help information | `--help` |
+| `--version` | - | Show version information | `--version` |
+
+### Example Usage
+
+```bash
+# Basic usage
+./target/release/docx-mcp
+
+# Readonly mode with size limit
+./target/release/docx-mcp --readonly --max-size 10485760
+
+# Sandbox mode with command whitelist
+./target/release/docx-mcp --sandbox --whitelist open_document,extract_text,export_to_markdown
+
+# Multiple security options
+./target/release/docx-mcp \
+  --readonly \
+  --no-external-tools \
+  --no-network \
+  --max-size 52428800 \
+  --max-docs 10
+```
+
+**Note:** Command-line arguments take precedence over environment variables when both are specified.
 
 ## 📚 Features
 

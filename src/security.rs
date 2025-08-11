@@ -2,6 +2,46 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::env;
 use tracing::{debug, info, warn};
+use clap::Parser;
+
+/// Command line arguments for the DOCX MCP server
+#[derive(Parser, Debug)]
+#[command(name = "docx-mcp")]
+#[command(about = "A comprehensive Model Context Protocol (MCP) server for Microsoft Word DOCX file manipulation")]
+#[command(version)]
+pub struct Args {
+    /// Enable readonly mode - only allow viewing operations
+    #[arg(long, env = "DOCX_MCP_READONLY")]
+    pub readonly: bool,
+
+    /// Comma-separated whitelist of allowed commands
+    #[arg(long, env = "DOCX_MCP_WHITELIST", value_delimiter = ',')]
+    pub whitelist: Option<Vec<String>>,
+
+    /// Comma-separated blacklist of forbidden commands  
+    #[arg(long, env = "DOCX_MCP_BLACKLIST", value_delimiter = ',')]
+    pub blacklist: Option<Vec<String>>,
+
+    /// Enable sandbox mode - restrict file operations to temp directory only
+    #[arg(long, env = "DOCX_MCP_SANDBOX")]
+    pub sandbox: bool,
+
+    /// Disable external tools (LibreOffice, etc.)
+    #[arg(long, env = "DOCX_MCP_NO_EXTERNAL_TOOLS")]
+    pub no_external_tools: bool,
+
+    /// Disable network operations
+    #[arg(long, env = "DOCX_MCP_NO_NETWORK")]
+    pub no_network: bool,
+
+    /// Maximum document size in bytes
+    #[arg(long, env = "DOCX_MCP_MAX_SIZE")]
+    pub max_size: Option<usize>,
+
+    /// Maximum number of open documents
+    #[arg(long, env = "DOCX_MCP_MAX_DOCS")]
+    pub max_docs: Option<usize>,
+}
 
 /// Security configuration for the MCP server
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -47,7 +87,59 @@ impl Default for SecurityConfig {
 }
 
 impl SecurityConfig {
-    /// Load configuration from environment variables
+    /// Create configuration from command line arguments
+    pub fn from_args(args: Args) -> Self {
+        let mut config = Self::default();
+        
+        // Apply command line arguments
+        if args.readonly {
+            config.readonly_mode = true;
+            info!("Running in READONLY mode - only viewing operations allowed");
+        }
+        
+        if let Some(whitelist) = args.whitelist {
+            let commands: HashSet<String> = whitelist.into_iter().collect();
+            info!("Command whitelist enabled with {} commands", commands.len());
+            config.command_whitelist = Some(commands);
+        }
+        
+        if let Some(blacklist) = args.blacklist {
+            let commands: HashSet<String> = blacklist.into_iter().collect();
+            info!("Command blacklist enabled with {} blocked commands", commands.len());
+            config.command_blacklist = Some(commands);
+        }
+        
+        if args.sandbox {
+            config.sandbox_mode = true;
+            config.allow_external_tools = false;
+            config.allow_network = false;
+            info!("Running in SANDBOX mode - restricted file operations");
+        }
+        
+        if args.no_external_tools {
+            config.allow_external_tools = false;
+            info!("External tools disabled");
+        }
+        
+        if args.no_network {
+            config.allow_network = false;
+            info!("Network operations disabled");
+        }
+        
+        if let Some(size) = args.max_size {
+            config.max_document_size = size;
+            info!("Max document size set to {} bytes", size);
+        }
+        
+        if let Some(max) = args.max_docs {
+            config.max_open_documents = max;
+            info!("Max open documents set to {}", max);
+        }
+        
+        config
+    }
+
+    /// Load configuration from environment variables (deprecated, use from_args instead)
     pub fn from_env() -> Self {
         let mut config = Self::default();
         

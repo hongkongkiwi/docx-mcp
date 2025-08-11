@@ -3,6 +3,7 @@ use mcp_server::{Server, ServerBuilder, ServerOptions};
 use mcp_core::ToolManager;
 use tracing::info;
 use tracing_subscriber::{EnvFilter, fmt, prelude::*};
+use clap::Parser;
 
 mod docx_tools;
 mod docx_handler;
@@ -23,8 +24,9 @@ async fn main() -> Result<()> {
         .with(EnvFilter::from_default_env())
         .init();
 
-    // Load security configuration from environment
-    let security_config = security::SecurityConfig::from_env();
+    // Parse command line arguments (which also includes environment variables)
+    let args = security::Args::parse();
+    let security_config = security::SecurityConfig::from_args(args);
     info!("Starting DOCX MCP Server - Security: {}", security_config.get_summary());
 
     let docx_provider = DocxToolsProvider::new_with_security(security_config);
