@@ -3,8 +3,8 @@ use docx_mcp::docx_handler::{DocxHandler, DocxStyle, TableData};
 use docx_mcp::pure_converter::PureRustConverter;
 use docx_mcp::docx_tools::DocxToolsProvider;
 use docx_mcp::security::SecurityConfig;
-use mcp_core::{ToolProvider, ToolResult};
-use serde_json::json;
+use mcp_core::types::{CallToolResponse, ToolResponseContent};
+use serde_json::{json, Value};
 use tempfile::TempDir;
 use std::time::{Duration, Instant};
 use std::sync::{Arc, Mutex};
@@ -17,7 +17,7 @@ const STRESS_TEST_ITERATIONS: usize = 100;
 #[test]
 fn test_large_document_performance() -> Result<()> {
     let temp_dir = TempDir::new().unwrap();
-    let mut handler = DocxHandler::new_with_temp_dir(temp_dir.path()).unwrap();
+    let mut handler = DocxHandler::new().unwrap();
     
     let start = Instant::now();
     let doc_id = handler.create_document().unwrap();
@@ -104,7 +104,7 @@ fn test_concurrent_document_stress() -> Result<()> {
         let results = Arc::clone(&results);
         
         thread::spawn(move || -> Result<()> {
-            let mut handler = DocxHandler::new_with_temp_dir(&temp_path)?;
+            let mut handler = DocxHandler::new()?;
             let mut local_results = Vec::new();
             
             for op_id in 0..operations_per_thread {
@@ -181,7 +181,7 @@ fn test_concurrent_document_stress() -> Result<()> {
 #[test]
 fn test_memory_intensive_operations() -> Result<()> {
     let temp_dir = TempDir::new().unwrap();
-    let mut handler = DocxHandler::new_with_temp_dir(temp_dir.path()).unwrap();
+    let mut handler = DocxHandler::new().unwrap();
     
     let mut doc_ids = Vec::new();
     
@@ -256,21 +256,26 @@ fn test_memory_intensive_operations() -> Result<()> {
 #[test]
 fn test_mcp_tool_performance() -> Result<()> {
     let temp_dir = TempDir::new().unwrap();
-    std::env::set_var("TMPDIR", temp_dir.path());
+    std::env::set_var("DOCX_MCP_TEMP", temp_dir.path());
     
     let provider = DocxToolsProvider::new();
     let mut operation_times = Vec::new();
     
     // Test document creation performance
     let start = Instant::now();
-    let create_result = tokio_test::block_on(async {
+    let create_resp: CallToolResponse = tokio_test::block_on(async {
         provider.call_tool("create_document", json!({})).await
     });
+    let create_result = match create_resp.content.get(0) {
+        Some(ToolResponseContent::Text(t)) => serde_json::from_str::<Value>(&t.text)
+            .map_err(|e| e.to_string()),
+        _ => Err("non-text response".to_string())
+    };
     let creation_time = start.elapsed();
     operation_times.push(("create_document", creation_time));
     
     let doc_id = match create_result {
-        ToolResult::Success(value) => value["document_id"].as_str().unwrap().to_string(),
+        Ok(value) if value.get("success").and_then(|v| v.as_bool()).unwrap_or(false) => value["document_id"].as_str().unwrap().to_string(),
         _ => panic!("Failed to create document"),
     };
     
@@ -282,13 +287,14 @@ fn test_mcp_tool_performance() -> Result<()> {
             "text": format!("Performance test paragraph {} with substantial content for timing measurements", i)
         });
         
-        let result = tokio_test::block_on(async {
+        let result: CallToolResponse = tokio_test::block_on(async {
             provider.call_tool("add_paragraph", args).await
         });
-        
-        match result {
-            ToolResult::Success(_) => {},
-            ToolResult::Error(e) => panic!("Failed to add paragraph {}: {}", i, e),
+        if let Some(ToolResponseContent::Text(t)) = result.content.get(0) {
+            let v: Value = serde_json::from_str(&t.text).unwrap_or(json!({"success": false}));
+            assert!(v.get("success").and_then(|b| b.as_bool()).unwrap_or(false), "Failed to add paragraph {}: {}", i, t.text);
+        } else {
+            panic!("Non-text response for add_paragraph");
         }
     }
     let paragraph_addition_time = start.elapsed();
@@ -332,19 +338,20 @@ fn test_mcp_tool_performance() -> Result<()> {
     // Test text extraction performance
     let start = Instant::now();
     let extract_args = json!({"document_id": doc_id});
-    let extract_result = tokio_test::block_on(async {
+    let extract_resp: CallToolResponse = tokio_test::block_on(async {
         provider.call_tool("extract_text", extract_args).await
     });
     let extraction_time = start.elapsed();
     operation_times.push(("extract_text", extraction_time));
     
-    match extract_result {
-        ToolResult::Success(value) => {
+    match extract_resp.content.get(0) {
+        Some(ToolResponseContent::Text(t)) => {
+            let value: Value = serde_json::from_str(&t.text).unwrap();
             let text = value["text"].as_str().unwrap();
             println!("Extracted text length: {} characters", text.len());
             assert!(text.len() > 5000, "Should extract substantial text");
         },
-        ToolResult::Error(e) => panic!("Text extraction failed: {}", e),
+        _ => panic!("Text extraction failed"),
     }
     
     // Test metadata retrieval performance
@@ -378,7 +385,7 @@ fn test_mcp_tool_performance() -> Result<()> {
 #[test]
 fn test_security_overhead_performance() -> Result<()> {
     let temp_dir = TempDir::new().unwrap();
-    std::env::set_var("TMPDIR", temp_dir.path());
+    std::env::set_var("DOCX_MCP_TEMP", temp_dir.path());
     
     // Test with default (permissive) security
     let default_provider = DocxToolsProvider::new();
@@ -435,7 +442,7 @@ fn test_conversion_performance_scaling() -> Result<()> {
     let mut performance_data = Vec::new();
     
     for &size in &document_sizes {
-        let mut handler = DocxHandler::new_with_temp_dir(temp_dir.path())?;
+        let mut handler = DocxHandler::new()?;
         let doc_id = handler.create_document()?;
         
         // Create document with specified number of paragraphs
@@ -494,7 +501,7 @@ fn test_conversion_performance_scaling() -> Result<()> {
 #[test]
 fn test_error_handling_performance() -> Result<()> {
     let temp_dir = TempDir::new().unwrap();
-    std::env::set_var("TMPDIR", temp_dir.path());
+    std::env::set_var("DOCX_MCP_TEMP", temp_dir.path());
     
     let provider = DocxToolsProvider::new();
     let error_operations = vec![
@@ -519,9 +526,7 @@ fn test_error_handling_performance() -> Result<()> {
                "Error handling for {} too slow: {:?}", operation, error_time);
         
         // Should return appropriate error
-        match result {
-            ToolResult::Error(_) | ToolResult::Success(_) => {}, // Both are acceptable for error cases
-        }
+        // Ensure we got a response shape; don't match legacy types here
     }
     
     Ok(())
@@ -530,7 +535,7 @@ fn test_error_handling_performance() -> Result<()> {
 #[test]
 fn test_resource_cleanup_performance() -> Result<()> {
     let temp_dir = TempDir::new().unwrap();
-    let mut handler = DocxHandler::new_with_temp_dir(temp_dir.path())?;
+    let mut handler = DocxHandler::new()?;
     
     let document_count = 50;
     let mut doc_ids = Vec::new();

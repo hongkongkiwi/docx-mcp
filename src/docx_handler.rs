@@ -59,7 +59,8 @@ pub struct DocxHandler {
 
 impl DocxHandler {
     pub fn new() -> Result<Self> {
-        let temp_dir = std::env::temp_dir().join("docx-mcp");
+        let base = std::env::var_os("DOCX_MCP_TEMP").map(PathBuf::from).unwrap_or_else(|| std::env::temp_dir());
+        let temp_dir = base.join("docx-mcp");
         fs::create_dir_all(&temp_dir)?;
         
         Ok(Self {
@@ -86,9 +87,15 @@ impl DocxHandler {
         let doc_path = self.temp_dir.join(format!("{}.docx", doc_id));
         
         // Initialize empty document on disk
+        if let Some(parent) = doc_path.parent() {
+            fs::create_dir_all(parent)
+                .with_context(|| format!("Failed to create parent directory for {:?}", doc_path))?;
+        }
         let docx = Docx::new();
-        let file = File::create(&doc_path)?;
-        docx.build().pack(file)?;
+        let file = File::create(&doc_path)
+            .with_context(|| format!("Failed to create DOCX file at {:?}", doc_path))?;
+        docx.build().pack(file)
+            .with_context(|| format!("Failed to write DOCX package at {:?}", doc_path))?;
         
         let metadata = DocxMetadata {
             id: doc_id.clone(),
@@ -114,6 +121,10 @@ impl DocxHandler {
         let doc_id = Uuid::new_v4().to_string();
         let doc_path = self.temp_dir.join(format!("{}.docx", doc_id));
         
+        if let Some(parent) = doc_path.parent() {
+            fs::create_dir_all(parent)
+                .with_context(|| format!("Failed to create parent directory for {:?}", doc_path))?;
+        }
         fs::copy(path, &doc_path)
             .with_context(|| format!("Failed to copy document from {:?}", path))?;
         

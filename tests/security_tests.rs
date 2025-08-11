@@ -48,6 +48,7 @@ fn test_command_whitelist() {
     
     let config = SecurityConfig {
         command_whitelist: Some(whitelist),
+        command_blacklist: None,
         ..Default::default()
     };
     
@@ -68,6 +69,7 @@ fn test_command_blacklist() {
     blacklist.insert("convert_to_pdf".to_string());
     
     let config = SecurityConfig {
+        command_whitelist: None,
         command_blacklist: Some(blacklist),
         ..Default::default()
     };
@@ -235,6 +237,7 @@ fn test_combined_security_modes() {
         readonly_mode: true,
         sandbox_mode: true,
         command_whitelist: Some(whitelist),
+        command_blacklist: None,
         allow_external_tools: false,
         allow_network: false,
         max_document_size: 1024,
@@ -295,6 +298,7 @@ fn test_security_error_messages() {
 fn readonly_config() -> SecurityConfig {
     SecurityConfig {
         readonly_mode: true,
+        command_blacklist: None,
         ..Default::default()
     }
 }
@@ -305,6 +309,7 @@ fn sandbox_config() -> SecurityConfig {
         sandbox_mode: true,
         allow_external_tools: false,
         allow_network: false,
+        command_blacklist: None,
         ..Default::default()
     }
 }
@@ -319,6 +324,7 @@ fn restrictive_config() -> SecurityConfig {
         readonly_mode: true,
         sandbox_mode: true,
         command_whitelist: Some(whitelist),
+        command_blacklist: None,
         max_document_size: 1024 * 1024, // 1MB
         max_open_documents: 5,
         allow_external_tools: false,

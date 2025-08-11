@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::env;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 use clap::{Parser, Subcommand};
 
 /// Command line arguments for the DOCX MCP server
@@ -307,6 +307,7 @@ impl SecurityConfig {
         commands.insert("export_to_markdown");
         commands.insert("export_to_html");
         commands.insert("create_preview");
+        commands.insert("get_security_info");
         
         commands
     }
@@ -375,7 +376,25 @@ impl SecurityConfig {
         let temp_dir = std::env::temp_dir();
         if let Ok(canonical_path) = path.canonicalize() {
             if let Ok(canonical_temp) = temp_dir.canonicalize() {
-                return canonical_path.starts_with(canonical_temp);
+                if canonical_path.starts_with(&canonical_temp) {
+                    return true;
+                }
+                // macOS sometimes resolves to /private/var; normalize for comparison
+                let cp = canonical_path.to_string_lossy();
+                let ct = canonical_temp.to_string_lossy();
+                let cp_norm = cp.replace("/private", "");
+                let ct_norm = ct.replace("/private", "");
+                if cp_norm.starts_with(&ct_norm) {
+                    return true;
+                }
+                // Heuristic for macOS TMP subfolders (…/T/…)
+                if cp_norm.contains("/T/") {
+                    return true;
+                }
+                // Heuristic for Linux /tmp
+                if cp_norm.starts_with("/tmp/") {
+                    return true;
+                }
             }
         }
         

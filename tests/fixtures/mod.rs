@@ -12,7 +12,7 @@ pub mod test_data;
 /// Common test fixture for creating a handler with a temporary directory
 pub fn create_test_handler() -> (DocxHandler, TempDir) {
     let temp_dir = TempDir::new().unwrap();
-    let handler = DocxHandler::new_with_temp_dir(temp_dir.path()).unwrap();
+    let handler = DocxHandler::new().unwrap();
     (handler, temp_dir)
 }
 

@@ -57,7 +57,7 @@ pub fn verify_fonts_blocking() -> Result<()> {
 }
 
 fn download_bytes(url: &str) -> Result<Vec<u8>> {
-    let mut res = ureq::get(url).call().context("request failed")?;
+    let res = ureq::get(url).call().context("request failed")?;
     let mut buf = Vec::new();
     res.into_reader().read_to_end(&mut buf).context("read body")?;
     Ok(buf)

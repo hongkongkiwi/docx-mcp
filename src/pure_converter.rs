@@ -74,6 +74,23 @@ impl PureRustConverter {
         Ok(())
     }
 
+    // Backward-compat wrapper names expected by tests
+    pub fn convert_docx_to_pdf(&self, docx_path: &Path, pdf_path: &Path) -> Result<()> {
+        self.docx_to_pdf_pure(docx_path, pdf_path)
+    }
+
+    pub fn convert_docx_to_images(&self, docx_path: &Path, output_dir: &Path) -> Result<Vec<PathBuf>> {
+        self.docx_to_images_pure(docx_path, output_dir, ImageFormat::Png)
+    }
+
+    pub fn convert_docx_to_images_with_format(&self, docx_path: &Path, output_dir: &Path, format: &str, _dpi: u32) -> Result<Vec<PathBuf>> {
+        let fmt = match format.to_lowercase().as_str() {
+            "jpg" | "jpeg" => ImageFormat::Jpeg,
+            _ => ImageFormat::Png,
+        };
+        self.docx_to_images_pure(docx_path, output_dir, fmt)
+    }
+
     /// Create a PDF from text content
     pub fn create_pdf_from_text(&self, text: &str, pdf_path: &Path) -> Result<()> {
         let (doc, page1, layer1) = PdfDocument::new("Document", Mm(210.0), Mm(297.0), "Layer 1");
@@ -179,7 +196,13 @@ impl PureRustConverter {
             };
             
             let output_path = output_dir.join(format!("page_{:03}.{}", page_num + 1, extension));
-            img.save_with_format(&output_path, format)?;
+            // JPEG does not support RGBA; convert to RGB if needed
+            if let ImageFormat::Jpeg = format {
+                let rgb = img.to_rgb8();
+                ::image::DynamicImage::ImageRgb8(rgb).save_with_format(&output_path, format)?;
+            } else {
+                img.save_with_format(&output_path, format)?;
+            }
             output_paths.push(output_path);
         }
         

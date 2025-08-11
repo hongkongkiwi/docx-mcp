@@ -1,15 +1,11 @@
-use async_trait::async_trait;
 use mcp_core::types::{Tool, CallToolResponse, ToolResponseContent, TextContent};
 // Adapt to latest MCP: we'll integrate via mcp-server Router separately
-use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tracing::{debug, info};
-use anyhow::Result;
 
-use crate::docx_handler::{DocxHandler, DocxStyle, TableData, ImageData};
+use crate::docx_handler::{DocxHandler, DocxStyle, TableData};
 use crate::converter::DocumentConverter;
 #[cfg(feature = "advanced-docx")]
 use crate::advanced_docx::AdvancedDocxHandler;
@@ -550,8 +546,12 @@ impl DocxToolsProvider {
         
         // Security check
         if let Err(security_error) = self.security.check_command(name, &arguments) {
+            let err_json = json!({
+                "success": false,
+                "error": format!("Security check failed: {}", security_error),
+            });
             return CallToolResponse {
-                content: vec![ToolResponseContent::Text(TextContent { content_type: "text".into(), text: format!("Security check failed: {}", security_error), annotations: None })],
+                content: vec![ToolResponseContent::Text(TextContent { content_type: "text".into(), text: err_json.to_string(), annotations: None })],
                 is_error: Some(true),
                 meta: None,
             };

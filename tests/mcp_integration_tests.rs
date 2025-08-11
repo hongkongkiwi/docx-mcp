@@ -1,15 +1,33 @@
 use docx_mcp::docx_tools::DocxToolsProvider;
 use docx_mcp::security::SecurityConfig;
-use mcp_core::{ToolProvider, ToolResult};
-use serde_json::json;
+use mcp_core::types::ToolResponseContent;
+use serde_json::{json, Value};
 use tempfile::TempDir;
-use tokio_test;
 use pretty_assertions::assert_eq;
 use rstest::*;
+enum ToolResult {
+    Success(Value),
+    Error(String),
+}
+
+async fn tool_result(provider: &DocxToolsProvider, name: &str, args: serde_json::Value) -> ToolResult {
+    let resp = provider.call_tool(name, args).await;
+    let val = match resp.content.get(0) {
+        Some(ToolResponseContent::Text(t)) => serde_json::from_str::<Value>(&t.text)
+            .unwrap_or_else(|_| json!({"success": false, "error": t.text.clone()})),
+        _ => json!({"success": false, "error": "non-text response"}),
+    };
+    if val.get("success").and_then(|v| v.as_bool()).unwrap_or(false) {
+        ToolResult::Success(val)
+    } else {
+        ToolResult::Error(val.get("error").and_then(|v| v.as_str()).unwrap_or("Unknown error").to_string())
+    }
+}
 
 async fn create_test_provider() -> (DocxToolsProvider, TempDir) {
     let temp_dir = TempDir::new().unwrap();
-    std::env::set_var("TMPDIR", temp_dir.path());
+    // Ensure our handler uses this path for its own temp files
+    std::env::set_var("DOCX_MCP_TEMP", temp_dir.path());
     
     let provider = DocxToolsProvider::new();
     (provider, temp_dir)
@@ -17,7 +35,7 @@ async fn create_test_provider() -> (DocxToolsProvider, TempDir) {
 
 async fn create_test_provider_with_security(config: SecurityConfig) -> (DocxToolsProvider, TempDir) {
     let temp_dir = TempDir::new().unwrap();
-    std::env::set_var("TMPDIR", temp_dir.path());
+    std::env::set_var("DOCX_MCP_TEMP", temp_dir.path());
     
     let provider = DocxToolsProvider::new_with_security(config);
     (provider, temp_dir)
@@ -66,7 +84,7 @@ async fn test_list_tools_readonly_config() {
 async fn test_create_document_tool() {
     let (provider, _temp_dir) = create_test_provider().await;
     
-    let result = provider.call_tool("create_document", json!({})).await;
+    let result = tool_result(&provider, "create_document", json!({})).await;
     
     match result {
         ToolResult::Success(value) => {
@@ -84,7 +102,7 @@ async fn test_add_paragraph_tool() {
     let (provider, _temp_dir) = create_test_provider().await;
     
     // First create a document
-    let create_result = provider.call_tool("create_document", json!({})).await;
+    let create_result = tool_result(&provider, "create_document", json!({})).await;
     let doc_id = match create_result {
         ToolResult::Success(value) => value["document_id"].as_str().unwrap().to_string(),
         _ => panic!("Failed to create document"),
@@ -96,7 +114,7 @@ async fn test_add_paragraph_tool() {
         "text": "Test paragraph content"
     });
     
-    let result = provider.call_tool("add_paragraph", args).await;
+    let result = tool_result(&provider, "add_paragraph", args).await;
     
     match result {
         ToolResult::Success(value) => {
@@ -107,7 +125,7 @@ async fn test_add_paragraph_tool() {
     
     // Verify content was added
     let extract_args = json!({"document_id": doc_id});
-    let extract_result = provider.call_tool("extract_text", extract_args).await;
+    let extract_result = tool_result(&provider, "extract_text", extract_args).await;
     
     match extract_result {
         ToolResult::Success(value) => {
@@ -122,7 +140,7 @@ async fn test_add_paragraph_tool() {
 async fn test_add_paragraph_with_style() {
     let (provider, _temp_dir) = create_test_provider().await;
     
-    let create_result = provider.call_tool("create_document", json!({})).await;
+    let create_result = tool_result(&provider, "create_document", json!({})).await;
     let doc_id = match create_result {
         ToolResult::Success(value) => value["document_id"].as_str().unwrap().to_string(),
         _ => panic!("Failed to create document"),
@@ -139,7 +157,7 @@ async fn test_add_paragraph_with_style() {
         }
     });
     
-    let result = provider.call_tool("add_paragraph", args).await;
+    let result = tool_result(&provider, "add_paragraph", args).await;
     
     match result {
         ToolResult::Success(value) => {
@@ -153,7 +171,7 @@ async fn test_add_paragraph_with_style() {
 async fn test_add_table_tool() {
     let (provider, _temp_dir) = create_test_provider().await;
     
-    let create_result = provider.call_tool("create_document", json!({})).await;
+    let create_result = tool_result(&provider, "create_document", json!({})).await;
     let doc_id = match create_result {
         ToolResult::Success(value) => value["document_id"].as_str().unwrap().to_string(),
         _ => panic!("Failed to create document"),
@@ -168,7 +186,7 @@ async fn test_add_table_tool() {
         ]
     });
     
-    let result = provider.call_tool("add_table", args).await;
+    let result = tool_result(&provider, "add_table", args).await;
     
     match result {
         ToolResult::Success(value) => {
@@ -179,7 +197,7 @@ async fn test_add_table_tool() {
     
     // Verify table content
     let extract_args = json!({"document_id": doc_id});
-    let extract_result = provider.call_tool("extract_text", extract_args).await;
+    let extract_result = tool_result(&provider, "extract_text", extract_args).await;
     
     match extract_result {
         ToolResult::Success(value) => {
@@ -195,7 +213,7 @@ async fn test_add_table_tool() {
 async fn test_add_heading_tool() {
     let (provider, _temp_dir) = create_test_provider().await;
     
-    let create_result = provider.call_tool("create_document", json!({})).await;
+    let create_result = tool_result(&provider, "create_document", json!({})).await;
     let doc_id = match create_result {
         ToolResult::Success(value) => value["document_id"].as_str().unwrap().to_string(),
         _ => panic!("Failed to create document"),
@@ -209,7 +227,7 @@ async fn test_add_heading_tool() {
             "level": level
         });
         
-        let result = provider.call_tool("add_heading", args).await;
+        let result = tool_result(&provider, "add_heading", args).await;
         
         match result {
             ToolResult::Success(value) => {
@@ -224,7 +242,7 @@ async fn test_add_heading_tool() {
 async fn test_add_list_tool() {
     let (provider, _temp_dir) = create_test_provider().await;
     
-    let create_result = provider.call_tool("create_document", json!({})).await;
+    let create_result = tool_result(&provider, "create_document", json!({})).await;
     let doc_id = match create_result {
         ToolResult::Success(value) => value["document_id"].as_str().unwrap().to_string(),
         _ => panic!("Failed to create document"),
@@ -237,7 +255,7 @@ async fn test_add_list_tool() {
         "ordered": true
     });
     
-    let result = provider.call_tool("add_list", ordered_args).await;
+    let result = tool_result(&provider, "add_list", ordered_args).await;
     assert!(matches!(result, ToolResult::Success(_)));
     
     // Test unordered list
@@ -247,7 +265,7 @@ async fn test_add_list_tool() {
         "ordered": false
     });
     
-    let result = provider.call_tool("add_list", unordered_args).await;
+    let result = tool_result(&provider, "add_list", unordered_args).await;
     assert!(matches!(result, ToolResult::Success(_)));
 }
 
@@ -255,14 +273,14 @@ async fn test_add_list_tool() {
 async fn test_get_metadata_tool() {
     let (provider, _temp_dir) = create_test_provider().await;
     
-    let create_result = provider.call_tool("create_document", json!({})).await;
+    let create_result = tool_result(&provider, "create_document", json!({})).await;
     let doc_id = match create_result {
         ToolResult::Success(value) => value["document_id"].as_str().unwrap().to_string(),
         _ => panic!("Failed to create document"),
     };
     
     let args = json!({"document_id": doc_id});
-    let result = provider.call_tool("get_metadata", args).await;
+    let result = tool_result(&provider, "get_metadata", args).await;
     
     match result {
         ToolResult::Success(value) => {
@@ -280,7 +298,7 @@ async fn test_get_metadata_tool() {
 async fn test_search_text_tool() {
     let (provider, _temp_dir) = create_test_provider().await;
     
-    let create_result = provider.call_tool("create_document", json!({})).await;
+    let create_result = tool_result(&provider, "create_document", json!({})).await;
     let doc_id = match create_result {
         ToolResult::Success(value) => value["document_id"].as_str().unwrap().to_string(),
         _ => panic!("Failed to create document"),
@@ -291,7 +309,7 @@ async fn test_search_text_tool() {
         "document_id": doc_id,
         "text": "This is a test document with searchable content. The word test appears multiple times."
     });
-    provider.call_tool("add_paragraph", add_args).await;
+    tool_result(&provider, "add_paragraph", add_args).await;
     
     // Search for text
     let search_args = json!({
@@ -300,7 +318,7 @@ async fn test_search_text_tool() {
         "case_sensitive": false
     });
     
-    let result = provider.call_tool("search_text", search_args).await;
+    let result = tool_result(&provider, "search_text", search_args).await;
     
     match result {
         ToolResult::Success(value) => {
@@ -317,7 +335,7 @@ async fn test_search_text_tool() {
 async fn test_get_word_count_tool() {
     let (provider, _temp_dir) = create_test_provider().await;
     
-    let create_result = provider.call_tool("create_document", json!({})).await;
+    let create_result = tool_result(&provider, "create_document", json!({})).await;
     let doc_id = match create_result {
         ToolResult::Success(value) => value["document_id"].as_str().unwrap().to_string(),
         _ => panic!("Failed to create document"),
@@ -329,10 +347,10 @@ async fn test_get_word_count_tool() {
         "document_id": doc_id,
         "text": content
     });
-    provider.call_tool("add_paragraph", add_args).await;
+    tool_result(&provider, "add_paragraph", add_args).await;
     
     let args = json!({"document_id": doc_id});
-    let result = provider.call_tool("get_word_count", args).await;
+    let result = tool_result(&provider, "get_word_count", args).await;
     
     match result {
         ToolResult::Success(value) => {
@@ -355,7 +373,7 @@ async fn test_get_security_info_tool() {
     };
     let (provider, _temp_dir) = create_test_provider_with_security(config).await;
     
-    let result = provider.call_tool("get_security_info", json!({})).await;
+    let result = tool_result(&provider, "get_security_info", json!({})).await;
     
     match result {
         ToolResult::Success(value) => {
@@ -378,7 +396,7 @@ async fn test_readonly_mode_blocks_write_operations() {
     let (provider, _temp_dir) = create_test_provider_with_security(config).await;
     
     // Should fail to create document in readonly mode
-    let result = provider.call_tool("create_document", json!({})).await;
+    let result = tool_result(&provider, "create_document", json!({})).await;
     
     match result {
         ToolResult::Error(e) => {
@@ -394,7 +412,7 @@ async fn test_document_not_found_error() {
     let (provider, _temp_dir) = create_test_provider().await;
     
     let args = json!({"document_id": "nonexistent-doc-id"});
-    let result = provider.call_tool("extract_text", args).await;
+    let result = tool_result(&provider, "extract_text", args).await;
     
     match result {
         ToolResult::Success(value) => {
@@ -411,15 +429,16 @@ async fn test_document_not_found_error() {
 async fn test_invalid_tool_name() {
     let (provider, _temp_dir) = create_test_provider().await;
     
-    let result = provider.call_tool("nonexistent_tool", json!({})).await;
+    let result = tool_result(&provider, "nonexistent_tool", json!({})).await;
     
     match result {
         ToolResult::Success(value) => {
             assert!(!value["success"].as_bool().unwrap());
-            assert!(value["error"].as_str().unwrap().contains("Unknown tool"));
+            let err = value["error"].as_str().unwrap();
+            assert!(err.contains("Unknown or unsupported tool") || err.contains("Unknown tool"));
         }
         ToolResult::Error(e) => {
-            assert!(e.contains("Unknown tool"));
+            assert!(e.contains("Unknown or unsupported tool") || e.contains("Unknown tool"));
         }
     }
 }
@@ -432,7 +451,7 @@ async fn test_multiple_documents() {
     
     // Create multiple documents
     for i in 0..3 {
-        let result = provider.call_tool("create_document", json!({})).await;
+        let result = tool_result(&provider, "create_document", json!({})).await;
         let doc_id = match result {
             ToolResult::Success(value) => value["document_id"].as_str().unwrap().to_string(),
             _ => panic!("Failed to create document {}", i),
@@ -443,13 +462,13 @@ async fn test_multiple_documents() {
             "document_id": doc_id,
             "text": format!("Document {} content", i)
         });
-        provider.call_tool("add_paragraph", args).await;
+        tool_result(&provider, "add_paragraph", args).await;
         
         doc_ids.push(doc_id);
     }
     
     // List documents
-    let list_result = provider.call_tool("list_documents", json!({})).await;
+    let list_result = tool_result(&provider, "list_documents", json!({})).await;
     
     match list_result {
         ToolResult::Success(value) => {
@@ -463,7 +482,7 @@ async fn test_multiple_documents() {
     // Verify each document has its unique content
     for (i, doc_id) in doc_ids.iter().enumerate() {
         let args = json!({"document_id": doc_id});
-        let result = provider.call_tool("extract_text", args).await;
+        let result = tool_result(&provider, "extract_text", args).await;
         
         match result {
             ToolResult::Success(value) => {
@@ -479,20 +498,20 @@ async fn test_multiple_documents() {
 async fn test_export_to_markdown() {
     let (provider, temp_dir) = create_test_provider().await;
     
-    let create_result = provider.call_tool("create_document", json!({})).await;
+    let create_result = tool_result(&provider, "create_document", json!({})).await;
     let doc_id = match create_result {
         ToolResult::Success(value) => value["document_id"].as_str().unwrap().to_string(),
         _ => panic!("Failed to create document"),
     };
     
     // Add content
-    provider.call_tool("add_heading", json!({
+    tool_result(&provider, "add_heading", json!({
         "document_id": doc_id,
         "text": "Test Document",
         "level": 1
     })).await;
     
-    provider.call_tool("add_paragraph", json!({
+    tool_result(&provider, "add_paragraph", json!({
         "document_id": doc_id,
         "text": "This is a test paragraph."
     })).await;
@@ -504,7 +523,7 @@ async fn test_export_to_markdown() {
         "output_path": output_path.to_str().unwrap()
     });
     
-    let result = provider.call_tool("export_to_markdown", args).await;
+    let result = tool_result(&provider, "export_to_markdown", args).await;
     
     match result {
         ToolResult::Success(value) => {
@@ -528,7 +547,7 @@ async fn test_export_to_markdown() {
 async fn test_tools_without_document_id(#[case] tool_name: &str, #[case] args: serde_json::Value) {
     let (provider, _temp_dir) = create_test_provider().await;
     
-    let result = provider.call_tool(tool_name, args).await;
+    let result = tool_result(&provider, tool_name, args).await;
     
     // These tools should work without requiring a document_id
     match result {
@@ -544,7 +563,7 @@ async fn test_tool_input_validation() {
     let (provider, _temp_dir) = create_test_provider().await;
     
     // Missing required arguments should fail gracefully
-    let result = provider.call_tool("add_paragraph", json!({})).await;
+    let result = tool_result(&provider, "add_paragraph", json!({})).await;
     
     match result {
         ToolResult::Success(value) => {
