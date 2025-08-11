@@ -87,8 +87,13 @@ impl AdvancedDocxHandler {
         let height_emu = height_px * 9525;
         
         let pic = Pic::new_with_dimensions(image_data.to_vec(), width_px, height_px);
+        // Push drawing into run via RunChild API path
         let drawing = Drawing::new().pic(pic);
-        let paragraph = Paragraph::new().add_run(Run::new().add_drawing(drawing));
+        let paragraph = Paragraph::new().add_run({
+            let mut r = Run::new();
+            // This uses public add_drawing on Run in this crate version via method available
+            r.add_drawing(drawing)
+        });
         
         Ok(docx.add_paragraph(paragraph))
     }
@@ -301,7 +306,7 @@ impl AdvancedDocxHandler {
         let mut paragraph_property = ParagraphProperty::new();
         
         if let Some(spacing) = style.spacing {
-            use docx_rs::types::line_spacing_type::LineSpacingType;
+            use docx_rs::LineSpacingType;
             paragraph_property = paragraph_property
                 .line_spacing(LineSpacing::new(spacing.line).line_rule(LineSpacingType::Auto));
         }

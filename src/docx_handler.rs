@@ -53,6 +53,8 @@ pub struct ImageData {
 pub struct DocxHandler {
     temp_dir: PathBuf,
     pub documents: std::collections::HashMap<String, DocxMetadata>,
+    // In-memory operations for documents created via this handler
+    in_memory_ops: std::collections::HashMap<String, Vec<DocxOp>>,
 }
 
 impl DocxHandler {
@@ -63,6 +65,7 @@ impl DocxHandler {
         Ok(Self {
             temp_dir,
             documents: std::collections::HashMap::new(),
+            in_memory_ops: std::collections::HashMap::new(),
         })
     }
 
@@ -74,6 +77,7 @@ impl DocxHandler {
         Ok(Self {
             temp_dir,
             documents: std::collections::HashMap::new(),
+            in_memory_ops: std::collections::HashMap::new(),
         })
     }
 
@@ -81,6 +85,7 @@ impl DocxHandler {
         let doc_id = Uuid::new_v4().to_string();
         let doc_path = self.temp_dir.join(format!("{}.docx", doc_id));
         
+        // Initialize empty document on disk
         let docx = Docx::new();
         let file = File::create(&doc_path)?;
         docx.build().pack(file)?;
@@ -99,6 +104,7 @@ impl DocxHandler {
         };
         
         self.documents.insert(doc_id.clone(), metadata);
+        self.in_memory_ops.insert(doc_id.clone(), Vec::new());
         info!("Created new document with ID: {}", doc_id);
         
         Ok(doc_id)
@@ -133,54 +139,10 @@ impl DocxHandler {
     }
 
     pub fn add_paragraph(&mut self, doc_id: &str, text: &str, style: Option<DocxStyle>) -> Result<()> {
-        let metadata = self.documents.get(doc_id)
-            .ok_or_else(|| anyhow::anyhow!("Document not found: {}", doc_id))?;
-        
-        let mut file = File::open(&metadata.path)?;
-        let mut buffer = Vec::new();
-        file.read_to_end(&mut buffer)?;
-        
-        let mut docx = Docx::from_reader(&buffer[..])?;
-        
-        let mut paragraph = Paragraph::new().add_run(Run::new().add_text(text));
-        
-        if let Some(style) = style {
-            let mut run = Run::new().add_text(text);
-            
-            if let Some(size) = style.font_size {
-                run = run.size(size);
-            }
-            if style.bold == Some(true) {
-                run = run.bold();
-            }
-            if style.italic == Some(true) {
-                run = run.italic();
-            }
-            if style.underline == Some(true) {
-                run = run.underline("single");
-            }
-            if let Some(color) = style.color {
-                run = run.color(color);
-            }
-            
-            paragraph = Paragraph::new().add_run(run);
-            
-            if let Some(alignment) = style.alignment {
-                paragraph = match alignment.as_str() {
-                    "left" => paragraph.align(AlignmentType::Left),
-                    "center" => paragraph.align(AlignmentType::Center),
-                    "right" => paragraph.align(AlignmentType::Right),
-                    "justify" => paragraph.align(AlignmentType::Justified),
-                    _ => paragraph,
-                };
-            }
-        }
-        
-        docx = docx.add_paragraph(paragraph);
-        
-        let file = File::create(&metadata.path)?;
-        docx.build().pack(file)?;
-        
+        self.ensure_modifiable(doc_id)?;
+        let ops = self.in_memory_ops.get_mut(doc_id).unwrap();
+        ops.push(DocxOp::Paragraph { text: text.to_string(), style });
+        self.write_docx(doc_id)?;
         info!("Added paragraph to document {}", doc_id);
         Ok(())
     }
@@ -188,12 +150,6 @@ impl DocxHandler {
     pub fn add_heading(&mut self, doc_id: &str, text: &str, level: usize) -> Result<()> {
         let metadata = self.documents.get(doc_id)
             .ok_or_else(|| anyhow::anyhow!("Document not found: {}", doc_id))?;
-        
-        let mut file = File::open(&metadata.path)?;
-        let mut buffer = Vec::new();
-        file.read_to_end(&mut buffer)?;
-        
-        let mut docx = Docx::from_reader(&buffer[..])?;
         
         let heading_style = match level {
             1 => "Heading1",
@@ -204,16 +160,10 @@ impl DocxHandler {
             6 => "Heading6",
             _ => "Heading1",
         };
-        
-        let paragraph = Paragraph::new()
-            .add_run(Run::new().add_text(text))
-            .style(heading_style);
-        
-        docx = docx.add_paragraph(paragraph);
-        
-        let file = File::create(&metadata.path)?;
-        docx.build().pack(file)?;
-        
+        self.ensure_modifiable(doc_id)?;
+        let ops = self.in_memory_ops.get_mut(doc_id).unwrap();
+        ops.push(DocxOp::Heading { text: text.to_string(), style: heading_style.to_string() });
+        self.write_docx(doc_id)?;
         info!("Added heading level {} to document {}", level, doc_id);
         Ok(())
     }
@@ -222,35 +172,10 @@ impl DocxHandler {
         let metadata = self.documents.get(doc_id)
             .ok_or_else(|| anyhow::anyhow!("Document not found: {}", doc_id))?;
         
-        let mut file = File::open(&metadata.path)?;
-        let mut buffer = Vec::new();
-        file.read_to_end(&mut buffer)?;
-        
-        let mut docx = Docx::from_reader(&buffer[..])?;
-        
-        let col_count = table_data.rows.get(0).map(|r| r.len()).unwrap_or(0);
-        let mut table = Table::new(vec![TableCell::new(); col_count]);
-        
-        for row_data in table_data.rows {
-            let mut cells = Vec::new();
-            for cell_text in row_data {
-                let cell = TableCell::new()
-                    .add_paragraph(Paragraph::new().add_run(Run::new().add_text(cell_text)));
-                cells.push(cell);
-            }
-            
-            while cells.len() < col_count {
-                cells.push(TableCell::new());
-            }
-            
-            table = table.add_row(TableRow::new(cells));
-        }
-        
-        docx = docx.add_table(table);
-        
-        let file = File::create(&metadata.path)?;
-        docx.build().pack(file)?;
-        
+        self.ensure_modifiable(doc_id)?;
+        let ops = self.in_memory_ops.get_mut(doc_id).unwrap();
+        ops.push(DocxOp::Table { data: table_data });
+        self.write_docx(doc_id)?;
         info!("Added table to document {}", doc_id);
         Ok(())
     }
@@ -259,25 +184,10 @@ impl DocxHandler {
         let metadata = self.documents.get(doc_id)
             .ok_or_else(|| anyhow::anyhow!("Document not found: {}", doc_id))?;
         
-        let mut file = File::open(&metadata.path)?;
-        let mut buffer = Vec::new();
-        file.read_to_end(&mut buffer)?;
-        
-        let mut docx = Docx::from_reader(&buffer[..])?;
-        
-        let numbering_id = if ordered { 1 } else { 2 };
-        
-        for item in items {
-            let paragraph = Paragraph::new()
-                .add_run(Run::new().add_text(item))
-                .numbering(NumberingId::new(numbering_id), IndentLevel::new(0));
-            
-            docx = docx.add_paragraph(paragraph);
-        }
-        
-        let file = File::create(&metadata.path)?;
-        docx.build().pack(file)?;
-        
+        self.ensure_modifiable(doc_id)?;
+        let ops = self.in_memory_ops.get_mut(doc_id).unwrap();
+        ops.push(DocxOp::List { items, ordered });
+        self.write_docx(doc_id)?;
         info!("Added {} list to document {}", if ordered { "ordered" } else { "unordered" }, doc_id);
         Ok(())
     }
@@ -286,18 +196,10 @@ impl DocxHandler {
         let metadata = self.documents.get(doc_id)
             .ok_or_else(|| anyhow::anyhow!("Document not found: {}", doc_id))?;
         
-        let mut file = File::open(&metadata.path)?;
-        let mut buffer = Vec::new();
-        file.read_to_end(&mut buffer)?;
-        
-        let mut docx = Docx::from_reader(&buffer[..])?;
-        
-        let paragraph = Paragraph::new().add_run(Run::new().add_break(BreakType::Page));
-        docx = docx.add_paragraph(paragraph);
-        
-        let file = File::create(&metadata.path)?;
-        docx.build().pack(file)?;
-        
+        self.ensure_modifiable(doc_id)?;
+        let ops = self.in_memory_ops.get_mut(doc_id).unwrap();
+        ops.push(DocxOp::PageBreak);
+        self.write_docx(doc_id)?;
         info!("Added page break to document {}", doc_id);
         Ok(())
     }
@@ -306,21 +208,10 @@ impl DocxHandler {
         let metadata = self.documents.get(doc_id)
             .ok_or_else(|| anyhow::anyhow!("Document not found: {}", doc_id))?;
         
-        let mut file = File::open(&metadata.path)?;
-        let mut buffer = Vec::new();
-        file.read_to_end(&mut buffer)?;
-        
-        let mut docx = Docx::from_reader(&buffer[..])?;
-        
-        let header = Header::new().add_paragraph(
-            Paragraph::new().add_run(Run::new().add_text(text))
-        );
-        
-        docx = docx.header(header);
-        
-        let file = File::create(&metadata.path)?;
-        docx.build().pack(file)?;
-        
+        self.ensure_modifiable(doc_id)?;
+        let ops = self.in_memory_ops.get_mut(doc_id).unwrap();
+        ops.push(DocxOp::Header(text.to_string()));
+        self.write_docx(doc_id)?;
         info!("Set header for document {}", doc_id);
         Ok(())
     }
@@ -329,21 +220,10 @@ impl DocxHandler {
         let metadata = self.documents.get(doc_id)
             .ok_or_else(|| anyhow::anyhow!("Document not found: {}", doc_id))?;
         
-        let mut file = File::open(&metadata.path)?;
-        let mut buffer = Vec::new();
-        file.read_to_end(&mut buffer)?;
-        
-        let mut docx = Docx::from_reader(&buffer[..])?;
-        
-        let footer = Footer::new().add_paragraph(
-            Paragraph::new().add_run(Run::new().add_text(text))
-        );
-        
-        docx = docx.footer(footer);
-        
-        let file = File::create(&metadata.path)?;
-        docx.build().pack(file)?;
-        
+        self.ensure_modifiable(doc_id)?;
+        let ops = self.in_memory_ops.get_mut(doc_id).unwrap();
+        ops.push(DocxOp::Footer(text.to_string()));
+        self.write_docx(doc_id)?;
         info!("Set footer for document {}", doc_id);
         Ok(())
     }
@@ -397,6 +277,7 @@ impl DocxHandler {
         if metadata.path.exists() {
             fs::remove_file(&metadata.path)?;
         }
+        self.in_memory_ops.remove(doc_id);
         
         info!("Closed document {}", doc_id);
         Ok(())
@@ -404,5 +285,105 @@ impl DocxHandler {
 
     pub fn list_documents(&self) -> Vec<DocxMetadata> {
         self.documents.values().cloned().collect()
+    }
+}
+
+#[derive(Debug, Clone)]
+enum DocxOp {
+    Paragraph { text: String, style: Option<DocxStyle> },
+    Heading { text: String, style: String },
+    Table { data: TableData },
+    List { items: Vec<String>, ordered: bool },
+    PageBreak,
+    Header(String),
+    Footer(String),
+}
+
+impl DocxHandler {
+    fn ensure_modifiable(&self, doc_id: &str) -> Result<()> {
+        if !self.in_memory_ops.contains_key(doc_id) {
+            anyhow::bail!("Modifications are supported only for documents created by this server (doc_id: {})", doc_id);
+        }
+        Ok(())
+    }
+
+    fn write_docx(&self, doc_id: &str) -> Result<()> {
+        let metadata = self.documents.get(doc_id)
+            .ok_or_else(|| anyhow::anyhow!("Document not found: {}", doc_id))?;
+        let ops = self.in_memory_ops.get(doc_id)
+            .ok_or_else(|| anyhow::anyhow!("No in-memory ops for document: {}", doc_id))?;
+
+        let mut docx = Docx::new();
+        let mut header_text: Option<String> = None;
+        let mut footer_text: Option<String> = None;
+
+        for op in ops {
+            match op {
+                DocxOp::Paragraph { text, style } => {
+                    let mut run = Run::new().add_text(text);
+                    if let Some(st) = style {
+                        if let Some(size) = st.font_size { run = run.size(size); }
+                        if st.bold == Some(true) { run = run.bold(); }
+                        if st.italic == Some(true) { run = run.italic(); }
+                        if st.underline == Some(true) { run = run.underline("single"); }
+                        if let Some(color) = &st.color { run = run.color(color.clone()); }
+                    }
+                    let para = Paragraph::new().add_run(run);
+                    docx = docx.add_paragraph(para);
+                }
+                DocxOp::Heading { text, style } => {
+                    let para = Paragraph::new().add_run(Run::new().add_text(text)).style(style);
+                    docx = docx.add_paragraph(para);
+                }
+                DocxOp::Table { data } => {
+                    let col_count = data.rows.get(0).map(|r| r.len()).unwrap_or(0);
+                    // Build rows
+                    let mut table = Table::new(vec![]);
+                    for row in &data.rows {
+                        let mut cells: Vec<TableCell> = Vec::new();
+                        for cell_text in row {
+                            let cell = TableCell::new().add_paragraph(Paragraph::new().add_run(Run::new().add_text(cell_text)));
+                            cells.push(cell);
+                        }
+                        while cells.len() < col_count { cells.push(TableCell::new()); }
+                        table = table.add_row(TableRow::new(cells));
+                    }
+                    docx = docx.add_table(table);
+                }
+                DocxOp::List { items, ordered } => {
+                    // Ensure minimal numbering definitions exist: abstract (0) and concrete (1)
+                    let abstract_id = 0usize;
+                    let concrete_id = 1usize;
+                    docx = docx
+                        .add_abstract_numbering(docx_rs::AbstractNumbering::new(abstract_id))
+                        .add_numbering(docx_rs::Numbering::new(concrete_id, abstract_id));
+                    for item in items {
+                        let para = Paragraph::new()
+                            .add_run(Run::new().add_text(item))
+                            .numbering(NumberingId::new(concrete_id), IndentLevel::new(0));
+                        docx = docx.add_paragraph(para);
+                    }
+                }
+                DocxOp::PageBreak => {
+                    let para = Paragraph::new().add_run(Run::new().add_break(BreakType::Page));
+                    docx = docx.add_paragraph(para);
+                }
+                DocxOp::Header(text) => { header_text = Some(text.clone()); }
+                DocxOp::Footer(text) => { footer_text = Some(text.clone()); }
+            }
+        }
+
+        if let Some(h) = header_text {
+            let header = Header::new().add_paragraph(Paragraph::new().add_run(Run::new().add_text(h)));
+            docx = docx.header(header);
+        }
+        if let Some(f) = footer_text {
+            let footer = Footer::new().add_paragraph(Paragraph::new().add_run(Run::new().add_text(f)));
+            docx = docx.footer(footer);
+        }
+
+        let file = File::create(&metadata.path)?;
+        docx.build().pack(file)?;
+        Ok(())
     }
 }

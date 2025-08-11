@@ -9,7 +9,7 @@ use tracing::{debug, info, warn};
 use roxmltree;
 use zip::ZipArchive;
 use rusttype::{Font, Scale};
-use lopdf::{self, dictionary, Object};
+use ::lopdf::{self as lopdf_crate, dictionary, Object};
 
 pub struct PureRustConverter;
 
@@ -244,7 +244,7 @@ impl PureRustConverter {
 
     /// Merge multiple PDFs using pure Rust
     pub fn merge_pdfs_pure(&self, pdf_paths: &[PathBuf], output_path: &Path) -> Result<()> {
-        use lopdf::{Document, Object, ObjectId};
+        use ::lopdf::{Document, Object, ObjectId};
         
         // Create a new document for merging
         let mut merged_doc = Document::with_version("1.5");
@@ -270,7 +270,7 @@ impl PureRustConverter {
         
         // Build the page tree for merged document
         let pages_id = merged_doc.new_object_id();
-        let pages_dict = lopdf::dictionary! {
+        let pages_dict = ::lopdf::dictionary! {
             "Type" => "Pages",
             "Kids" => all_pages.iter().map(|id| Object::Reference(*id)).collect::<Vec<_>>(),
             "Count" => all_pages.len() as i32,
@@ -279,7 +279,7 @@ impl PureRustConverter {
         
         // Update catalog
         let catalog_id = merged_doc.new_object_id();
-        let catalog = lopdf::dictionary! {
+        let catalog = ::lopdf::dictionary! {
             "Type" => "Catalog",
             "Pages" => Object::Reference(pages_id),
         };
@@ -295,7 +295,7 @@ impl PureRustConverter {
 
     /// Split a PDF into individual pages using pure Rust
     pub fn split_pdf_pure(&self, pdf_path: &Path, output_dir: &Path) -> Result<Vec<PathBuf>> {
-        use lopdf::Document;
+        use ::lopdf::Document;
         
         fs::create_dir_all(output_dir)?;
         
@@ -314,7 +314,7 @@ impl PureRustConverter {
                 
                 // Create page tree
                 let pages_id = single_page_doc.new_object_id();
-                let pages_dict = lopdf::dictionary! {
+                let pages_dict = ::lopdf::dictionary! {
                     "Type" => "Pages",
                     "Kids" => vec![Object::Reference(new_page_id)],
                     "Count" => 1,
@@ -323,7 +323,7 @@ impl PureRustConverter {
                 
                 // Create catalog
                 let catalog_id = single_page_doc.new_object_id();
-                let catalog = lopdf::dictionary! {
+                let catalog = ::lopdf::dictionary! {
                     "Type" => "Catalog",
                     "Pages" => Object::Reference(pages_id),
                 };

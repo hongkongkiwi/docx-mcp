@@ -1,7 +1,8 @@
 use anyhow::{Context, Result};
 use ::image::{DynamicImage, ImageFormat, Rgba, RgbaImage};
 use printpdf::*;
-use lopdf::{self, dictionary, Object, ObjectId, Document as LoDocument};
+use dotext::MsDoc;
+use ::lopdf::{self as lopdf_crate, dictionary, Object, ObjectId, Document as LoDocument};
 use std::fs::{self, File};
 use std::io::{BufWriter, Read, Write};
 use std::path::{Path, PathBuf};

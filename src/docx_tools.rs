@@ -11,12 +11,15 @@ use anyhow::Result;
 
 use crate::docx_handler::{DocxHandler, DocxStyle, TableData, ImageData};
 use crate::converter::DocumentConverter;
+#[cfg(feature = "advanced-docx")]
 use crate::advanced_docx::AdvancedDocxHandler;
 use crate::security::{SecurityConfig, SecurityMiddleware};
 
+#[derive(Clone)]
 pub struct DocxToolsProvider {
     handler: Arc<Mutex<DocxHandler>>,
     converter: Arc<DocumentConverter>,
+    #[cfg(feature = "advanced-docx")]
     advanced: Arc<AdvancedDocxHandler>,
     security: Arc<SecurityMiddleware>,
     security_config: SecurityConfig,
@@ -31,6 +34,7 @@ impl DocxToolsProvider {
         Self {
             handler: Arc::new(Mutex::new(DocxHandler::new().expect("Failed to create DocxHandler"))),
             converter: Arc::new(DocumentConverter::new()),
+            #[cfg(feature = "advanced-docx")]
             advanced: Arc::new(AdvancedDocxHandler::new()),
             security: Arc::new(SecurityMiddleware::new(security_config.clone())),
             security_config,
@@ -38,9 +42,8 @@ impl DocxToolsProvider {
     }
 }
 
-#[async_trait]
-impl ToolProvider for DocxToolsProvider {
-    async fn list_tools(&self) -> Vec<Tool> {
+impl DocxToolsProvider {
+    pub async fn list_tools(&self) -> Vec<Tool> {
         let mut all_tools = vec![
             Tool {
                 name: "create_document".to_string(),
@@ -50,6 +53,7 @@ impl ToolProvider for DocxToolsProvider {
                     "properties": {},
                     "required": []
                 }),
+                annotations: None,
             },
             Tool {
                 name: "open_document".to_string(),
@@ -64,6 +68,7 @@ impl ToolProvider for DocxToolsProvider {
                     },
                     "required": ["path"]
                 }),
+                annotations: None,
             },
             Tool {
                 name: "add_paragraph".to_string(),
@@ -98,6 +103,7 @@ impl ToolProvider for DocxToolsProvider {
                     },
                     "required": ["document_id", "text"]
                 }),
+                annotations: None,
             },
             Tool {
                 name: "add_heading".to_string(),
@@ -122,6 +128,7 @@ impl ToolProvider for DocxToolsProvider {
                     },
                     "required": ["document_id", "text", "level"]
                 }),
+                annotations: None,
             },
             Tool {
                 name: "add_table".to_string(),
@@ -153,6 +160,7 @@ impl ToolProvider for DocxToolsProvider {
                     },
                     "required": ["document_id", "rows"]
                 }),
+                annotations: None,
             },
             Tool {
                 name: "add_list".to_string(),
@@ -177,6 +185,7 @@ impl ToolProvider for DocxToolsProvider {
                     },
                     "required": ["document_id", "items"]
                 }),
+                annotations: None,
             },
             Tool {
                 name: "add_page_break".to_string(),
@@ -191,6 +200,7 @@ impl ToolProvider for DocxToolsProvider {
                     },
                     "required": ["document_id"]
                 }),
+                annotations: None,
             },
             Tool {
                 name: "set_header".to_string(),
@@ -209,6 +219,7 @@ impl ToolProvider for DocxToolsProvider {
                     },
                     "required": ["document_id", "text"]
                 }),
+                annotations: None,
             },
             Tool {
                 name: "set_footer".to_string(),
@@ -227,6 +238,7 @@ impl ToolProvider for DocxToolsProvider {
                     },
                     "required": ["document_id", "text"]
                 }),
+                annotations: None,
             },
             Tool {
                 name: "find_and_replace".to_string(),
@@ -249,6 +261,7 @@ impl ToolProvider for DocxToolsProvider {
                     },
                     "required": ["document_id", "find_text", "replace_text"]
                 }),
+                annotations: None,
             },
             Tool {
                 name: "extract_text".to_string(),
@@ -263,6 +276,7 @@ impl ToolProvider for DocxToolsProvider {
                     },
                     "required": ["document_id"]
                 }),
+                annotations: None,
             },
             Tool {
                 name: "get_metadata".to_string(),
@@ -277,6 +291,7 @@ impl ToolProvider for DocxToolsProvider {
                     },
                     "required": ["document_id"]
                 }),
+                annotations: None,
             },
             Tool {
                 name: "save_document".to_string(),
@@ -295,6 +310,7 @@ impl ToolProvider for DocxToolsProvider {
                     },
                     "required": ["document_id", "output_path"]
                 }),
+                annotations: None,
             },
             Tool {
                 name: "close_document".to_string(),
@@ -309,6 +325,7 @@ impl ToolProvider for DocxToolsProvider {
                     },
                     "required": ["document_id"]
                 }),
+                annotations: None,
             },
             Tool {
                 name: "list_documents".to_string(),
@@ -318,6 +335,7 @@ impl ToolProvider for DocxToolsProvider {
                     "properties": {},
                     "required": []
                 }),
+                annotations: None,
             },
             Tool {
                 name: "convert_to_pdf".to_string(),
@@ -336,6 +354,7 @@ impl ToolProvider for DocxToolsProvider {
                     },
                     "required": ["document_id", "output_path"]
                 }),
+                annotations: None,
             },
             Tool {
                 name: "convert_to_images".to_string(),
@@ -367,7 +386,11 @@ impl ToolProvider for DocxToolsProvider {
                     },
                     "required": ["document_id", "output_dir"]
                 }),
+                annotations: None,
             },
+            // Advanced tools are gated and added only when feature is enabled
+            
+            #[cfg(feature = "advanced-docx")]
             Tool {
                 name: "merge_documents".to_string(),
                 description: Some("Merge multiple DOCX documents into one".to_string()),
@@ -386,7 +409,9 @@ impl ToolProvider for DocxToolsProvider {
                     },
                     "required": ["document_ids", "output_path"]
                 }),
+                annotations: None,
             },
+            #[cfg(feature = "advanced-docx")]
             Tool {
                 name: "split_document".to_string(),
                 description: Some("Split a document at page breaks".to_string()),
@@ -404,6 +429,7 @@ impl ToolProvider for DocxToolsProvider {
                     },
                     "required": ["document_id", "output_dir"]
                 }),
+                annotations: None,
             },
             Tool {
                 name: "get_document_structure".to_string(),
@@ -418,6 +444,7 @@ impl ToolProvider for DocxToolsProvider {
                     },
                     "required": ["document_id"]
                 }),
+                annotations: None,
             },
             Tool {
                 name: "analyze_formatting".to_string(),
@@ -432,6 +459,7 @@ impl ToolProvider for DocxToolsProvider {
                     },
                     "required": ["document_id"]
                 }),
+                annotations: None,
             },
             Tool {
                 name: "get_word_count".to_string(),
@@ -446,6 +474,7 @@ impl ToolProvider for DocxToolsProvider {
                     },
                     "required": ["document_id"]
                 }),
+                annotations: None,
             },
             Tool {
                 name: "search_text".to_string(),
@@ -474,6 +503,7 @@ impl ToolProvider for DocxToolsProvider {
                     },
                     "required": ["document_id", "search_term"]
                 }),
+                annotations: None,
             },
             Tool {
                 name: "export_to_markdown".to_string(),
@@ -492,6 +522,7 @@ impl ToolProvider for DocxToolsProvider {
                     },
                     "required": ["document_id", "output_path"]
                 }),
+                annotations: None,
             },
             Tool {
                 name: "get_security_info".to_string(),
@@ -501,6 +532,7 @@ impl ToolProvider for DocxToolsProvider {
                     "properties": {},
                     "required": []
                 }),
+                annotations: None,
             },
         ];
         
@@ -513,7 +545,7 @@ impl ToolProvider for DocxToolsProvider {
         all_tools
     }
 
-    async fn call_tool(&self, name: &str, arguments: Value) -> CallToolResponse {
+    pub async fn call_tool(&self, name: &str, arguments: Value) -> CallToolResponse {
         debug!("Calling tool: {} with arguments: {:?}", name, arguments);
         
         // Security check
@@ -982,7 +1014,7 @@ impl ToolProvider for DocxToolsProvider {
                 let handler = self.handler.lock().unwrap();
                 match handler.extract_text(doc_id) {
                     Ok(text) => {
-                        let search_text = if case_sensitive { text } else { text.to_lowercase() };
+                        let search_text = if case_sensitive { text.clone() } else { text.to_lowercase() };
                         let search_for = if case_sensitive { search_term.to_string() } else { search_term.to_lowercase() };
                         
                         let mut matches = Vec::new();
@@ -1086,7 +1118,7 @@ impl ToolProvider for DocxToolsProvider {
             _ => {
                 json!({
                     "success": false,
-                    "error": format!("Unknown tool: {}", name)
+                    "error": format!("Unknown or unsupported tool: {}", name)
                 })
             }
         };

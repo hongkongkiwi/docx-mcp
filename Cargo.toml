@@ -24,6 +24,7 @@ exclude = [
 # Official MCP SDK
 mcp-server = "0.1"
 mcp-core = "0.1"
+mcp-spec = "0.1"
 
 # Async runtime
 tokio = { version = "1.40", features = ["full"] }
@@ -100,6 +101,7 @@ wkhtmltopdf = { version = "0.4", optional = true }
 [features]
 default = ["embedded-fonts", "pure-rust-pdf"]
 runtime-server = []
+advanced-docx = []
 embedded-fonts = []
 pure-rust-pdf = []
 external-tools = ["headless_chrome", "wkhtmltopdf"]
