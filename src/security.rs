@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::env;
 use tracing::{debug, info, warn};
-use clap::Parser;
+use clap::{Parser, Subcommand};
 
 /// Command line arguments for the DOCX MCP server
 #[derive(Parser, Debug)]
@@ -41,6 +41,10 @@ pub struct Args {
     /// Maximum number of open documents
     #[arg(long, env = "DOCX_MCP_MAX_DOCS")]
     pub max_docs: Option<usize>,
+
+    /// Optional top-level subcommand (e.g., fonts download)
+    #[command(subcommand)]
+    pub command: Option<CliCommand>,
 }
 
 /// Security configuration for the MCP server
@@ -69,6 +73,23 @@ pub struct SecurityConfig {
     
     /// Sandbox mode - restricts file operations to temp directory only
     pub sandbox_mode: bool,
+}
+
+/// Top-level CLI subcommands
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize)]
+pub enum CliCommand {
+    /// Font utilities
+    Fonts {
+        #[command(subcommand)]
+        action: FontsAction,
+    },
+}
+
+/// Font-related actions
+#[derive(Subcommand, Debug, Clone, Serialize, Deserialize)]
+pub enum FontsAction {
+    /// Download open-source fonts into assets/fonts
+    Download,
 }
 
 impl Default for SecurityConfig {
