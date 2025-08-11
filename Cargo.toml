@@ -1,0 +1,106 @@
+[package]
+name = "docx-mcp"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Official MCP SDK
+mcp-server = "0.3"
+mcp-core = "0.3"
+
+# Async runtime
+tokio = { version = "1.40", features = ["full"] }
+async-trait = "0.1"
+
+# DOCX manipulation (pure Rust)
+docx-rs = "0.4"
+zip = "0.6"
+quick-xml = "0.36"
+
+# Pure Rust text extraction from DOCX
+roxmltree = "0.20"  # XML parsing without external deps
+
+# PDF generation (pure Rust)
+printpdf = "0.7"
+lopdf = "0.34"
+rusttype = "0.9"  # Font rendering in pure Rust
+
+# Embedded fonts for PDF
+include_bytes_plus = "1.0"
+
+# Image processing (pure Rust)
+image = { version = "0.25", features = ["png", "jpeg", "webp", "bmp", "gif"] }
+imageproc = "0.25"
+resvg = "0.44"  # SVG rendering in pure Rust
+tiny-skia = "0.11"  # 2D graphics in pure Rust
+usvg = "0.44"  # SVG parsing
+
+# HTML/Markdown to PDF (pure Rust alternatives)
+pulldown-cmark = "0.12"  # Markdown parsing
+html5ever = "0.29"  # HTML parsing
+comrak = "0.28"  # CommonMark parsing
+
+# Template rendering (pure Rust)
+handlebars = "6.0"  # Template engine
+tera = { version = "1.20", optional = true }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+
+# Error handling and logging
+anyhow = "1.0"
+thiserror = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# File handling
+tempfile = "3.10"
+walkdir = "2.5"
+
+# Additional utilities
+uuid = { version = "1.10", features = ["v4", "serde"] }
+base64 = "0.22"
+chrono = { version = "0.4", features = ["serde"] }
+regex = "1.10"
+once_cell = "1.20"
+
+# Optional external tool support
+headless_chrome = { version = "1.0", optional = true }
+wkhtmltopdf = { version = "0.4", optional = true }
+
+[features]
+default = ["embedded-fonts", "pure-rust-pdf"]
+embedded-fonts = []
+pure-rust-pdf = []
+external-tools = ["headless_chrome", "wkhtmltopdf"]
+full = ["embedded-fonts", "pure-rust-pdf", "external-tools", "tera"]
+
+[build-dependencies]
+anyhow = "1.0"
+
+[[bin]]
+name = "docx-mcp"
+path = "src/main.rs"
+
+[dev-dependencies]
+# Testing framework
+tokio-test = "0.4"
+assert_matches = "1.5"
+pretty_assertions = "1.4"
+rstest = "0.18"
+test-log = "0.2"
+
+# Test utilities
+tempfile = "3.10"
+uuid = { version = "1.10", features = ["v4"] }
+criterion = { version = "0.5", features = ["html_reports"] }
+
+# Mock and fixtures
+mockito = "1.4"
+serde_yaml = "0.9"
+
+[[bench]]
+name = "docx_benchmarks"
+harness = false

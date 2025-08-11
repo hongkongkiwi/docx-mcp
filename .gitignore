@@ -1,0 +1,67 @@
+/example/MCP-Doc
+
+# Rust
+target/
+Cargo.lock
+**/*.rs.bk
+*.pdb
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test outputs
+*.docx
+*.pdf
+*.png
+*.jpg
+*.jpeg
+images/
+thumbnails/
+output/
+
+# Temporary files
+/tmp/
+*.tmp
+*.temp
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv
+
+# Logs
+*.log
+logs/
+
+# Documentation build
+/docs/_build/
+/docs/.doctrees/
+
+# Coverage
+*.gcov
+*.gcda
+*.gcno
+coverage/
+lcov.info
+
+# Profiling
+*.prof
+perf.data
+perf.data.old
+
+# Dependencies
+node_modules/
+vendor/

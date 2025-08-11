@@ -1,0 +1,144 @@
+{
+  "claude_desktop": {
+    "description": "Claude Desktop configuration",
+    "file_location_macos": "~/Library/Application Support/Claude/claude_desktop_config.json",
+    "file_location_windows": "%APPDATA%\\Claude\\claude_desktop_config.json",
+    "config": {
+      "mcpServers": {
+        "docx": {
+          "command": "/absolute/path/to/docx-mcp/target/release/docx-mcp",
+          "args": [],
+          "env": {
+            "RUST_LOG": "info"
+          }
+        }
+      }
+    }
+  },
+  "cursor": {
+    "description": "Cursor IDE configuration",
+    "file_location": "~/.cursor/config.json or Settings UI",
+    "config": {
+      "mcp": {
+        "servers": {
+          "docx": {
+            "command": "/absolute/path/to/docx-mcp/target/release/docx-mcp",
+            "args": [],
+            "env": {
+              "RUST_LOG": "info"
+            }
+          }
+        }
+      }
+    }
+  },
+  "windsurf": {
+    "description": "Windsurf (Codeium) configuration",
+    "file_location": "~/.windsurf/config.json",
+    "config": {
+      "mcp": {
+        "servers": {
+          "docx": {
+            "command": "/absolute/path/to/docx-mcp/target/release/docx-mcp",
+            "args": [],
+            "env": {
+              "RUST_LOG": "info"
+            }
+          }
+        }
+      }
+    }
+  },
+  "continue_dev": {
+    "description": "Continue.dev configuration",
+    "file_location": "~/.continue/config.json",
+    "config": {
+      "models": [
+        {
+          "title": "Claude 3.5 Sonnet",
+          "provider": "anthropic",
+          "model": "claude-3-5-sonnet-20241022",
+          "apiKey": "your-api-key",
+          "mcp_servers": {
+            "docx": {
+              "command": "/absolute/path/to/docx-mcp/target/release/docx-mcp",
+              "args": []
+            }
+          }
+        }
+      ]
+    }
+  },
+  "vscode_mcp": {
+    "description": "VS Code with MCP Extension",
+    "file_location": ".vscode/settings.json",
+    "config": {
+      "mcp.servers": {
+        "docx": {
+          "command": "/absolute/path/to/docx-mcp/target/release/docx-mcp",
+          "args": [],
+          "env": {
+            "RUST_LOG": "info"
+          }
+        }
+      }
+    }
+  },
+  "zed": {
+    "description": "Zed editor configuration",
+    "file_location": "~/.config/zed/settings.json",
+    "config": {
+      "assistant": {
+        "mcp_servers": {
+          "docx": {
+            "command": "/absolute/path/to/docx-mcp/target/release/docx-mcp",
+            "args": [],
+            "env": {
+              "RUST_LOG": "info"
+            }
+          }
+        }
+      }
+    }
+  },
+  "neovim": {
+    "description": "Neovim with MCP support",
+    "file_location": "~/.config/nvim/mcp.json",
+    "config": {
+      "servers": {
+        "docx": {
+          "command": "/absolute/path/to/docx-mcp/target/release/docx-mcp",
+          "args": [],
+          "env": {
+            "RUST_LOG": "info"
+          }
+        }
+      }
+    }
+  },
+  "multiple_servers_example": {
+    "description": "Example with multiple MCP servers",
+    "config": {
+      "mcpServers": {
+        "docx": {
+          "command": "/path/to/docx-mcp/target/release/docx-mcp",
+          "args": [],
+          "env": {
+            "RUST_LOG": "info"
+          }
+        },
+        "filesystem": {
+          "command": "/path/to/filesystem-mcp",
+          "args": ["--root", "/home/user/documents"]
+        },
+        "github": {
+          "command": "/path/to/github-mcp",
+          "args": [],
+          "env": {
+            "GITHUB_TOKEN": "ghp_..."
+          }
+        }
+      }
+    }
+  }
+}
