@@ -243,15 +243,18 @@ impl SecurityConfig {
             return false;
         }
         
-        // Check whitelist (if set, only whitelisted commands are allowed)
+        // Check whitelist (if set, only whitelisted commands are allowed);
+        // Whitelist takes precedence over blacklist.
         if let Some(ref whitelist) = self.command_whitelist {
-            if !whitelist.contains(command) {
+            if whitelist.contains(command) {
+                return true;
+            } else {
                 debug!("Command '{}' blocked: not in whitelist", command);
                 return false;
             }
         }
-        
-        // Check blacklist (if set, blacklisted commands are blocked)
+
+        // If no whitelist, enforce blacklist if present
         if let Some(ref blacklist) = self.command_blacklist {
             if blacklist.contains(command) {
                 debug!("Command '{}' blocked: in blacklist", command);
@@ -374,7 +377,17 @@ impl SecurityConfig {
         
         // In sandbox mode, only allow operations in temp directory
         let temp_dir = std::env::temp_dir();
-        if let Ok(canonical_path) = path.canonicalize() {
+        // Fast-path for non-existent paths under common temp prefixes
+        if !path.exists() {
+            if let Some(s) = path.to_str() {
+                if s.starts_with("/tmp/") || s.starts_with("/private/tmp/") {
+                    return true;
+                }
+            }
+        }
+        // Avoid requiring the file to exist. Use parent directory for canonicalization when needed.
+        let candidate = if path.exists() { path.to_path_buf() } else { path.parent().unwrap_or(path).to_path_buf() };
+        if let Ok(canonical_path) = candidate.canonicalize() {
             if let Ok(canonical_temp) = temp_dir.canonicalize() {
                 if canonical_path.starts_with(&canonical_temp) {
                     return true;

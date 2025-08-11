@@ -1,14 +1,14 @@
 use anyhow::{Context, Result};
-use ::image::{DynamicImage, ImageFormat, Rgba, RgbaImage};
+use ::image::{ImageFormat};
 use printpdf::*;
 use dotext::MsDoc;
-use ::lopdf::{self as lopdf_crate, dictionary, Object, ObjectId, Document as LoDocument};
+use ::lopdf::{dictionary, Object, ObjectId, Document as LoDocument};
 use std::fs::{self, File};
-use std::io::{BufWriter, Read, Write};
+use std::io::{BufWriter, Read};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use tempfile::NamedTempFile;
-use tracing::{debug, info, warn};
+use tracing::{debug, info};
 
 use crate::pure_converter::PureRustConverter;
 

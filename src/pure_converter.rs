@@ -2,14 +2,13 @@ use anyhow::{Context, Result};
 use ::image::{DynamicImage, ImageFormat, Rgba, RgbaImage};
 use printpdf::*;
 use std::fs::{self, File};
-use std::io::{BufReader, BufWriter, Read, Write};
+use std::io::{BufReader, BufWriter, Read};
 use std::path::{Path, PathBuf};
 use tempfile::NamedTempFile;
-use tracing::{debug, info, warn};
+use tracing::{info};
 use roxmltree;
 use zip::ZipArchive;
-use rusttype::{Font, Scale};
-use ::lopdf::{self as lopdf_crate, dictionary, Object};
+use ::lopdf::{dictionary, Object};
 
 pub struct PureRustConverter;
 
@@ -31,7 +30,9 @@ impl PureRustConverter {
             let name = file.name().to_string();
             
             if name == "word/document.xml" {
-                file.read_to_string(&mut document_xml)?;
+                let mut buf = Vec::new();
+                file.read_to_end(&mut buf)?;
+                document_xml = String::from_utf8_lossy(&buf).to_string();
                 break;
             }
         }
