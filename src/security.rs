@@ -90,6 +90,8 @@ pub enum CliCommand {
 pub enum FontsAction {
     /// Download open-source fonts into assets/fonts
     Download,
+    /// Verify checksums of fonts in assets/fonts
+    Verify,
 }
 
 impl Default for SecurityConfig {

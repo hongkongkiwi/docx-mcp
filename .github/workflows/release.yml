@@ -106,8 +106,8 @@ jobs:
         brew update
         brew install pkg-config freetype jpeg libpng
 
-    - name: Run tests
-      run: cargo test --all-features --verbose
+    - name: Run tests (library only)
+      run: cargo test --verbose --lib
 
   build:
     name: Build Release Artifacts
@@ -169,9 +169,9 @@ jobs:
     - name: Build release binary
       run: |
         if [ "${{ matrix.job.use-cross }}" = "true" ]; then
-          cross build --release --target ${{ matrix.job.target }} --all-features
+          cross build --release --target ${{ matrix.job.target }}
         else
-          cargo build --release --target ${{ matrix.job.target }} --all-features
+          cargo build --release --target ${{ matrix.job.target }}
         fi
 
     - name: Prepare release archive

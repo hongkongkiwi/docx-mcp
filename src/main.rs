@@ -34,19 +34,13 @@ async fn main() -> Result<()> {
             security::CliCommand::Fonts { action } => {
                 match action {
                     security::FontsAction::Download => {
-                        info!("Downloading fonts via embedded helper...");
-                        // Prefer the script if available; otherwise, fetch directly in the future
-                        let script_path = "./download_fonts.sh";
-                        if !std::path::Path::new(script_path).exists() {
-                            warn!("download_fonts.sh not found; please run it manually or pull latest");
-                            anyhow::bail!("download_fonts.sh not found");
-                        }
-
-                        let status = Command::new(script_path).status()?;
-                        if !status.success() {
-                            anyhow::bail!("Font download helper failed");
-                        }
+                        docx_mcp::fonts_cli::download_fonts_blocking()?;
                         info!("Fonts downloaded successfully");
+                        return Ok(());
+                    }
+                    security::FontsAction::Verify => {
+                        docx_mcp::fonts_cli::verify_fonts_blocking()?;
+                        info!("Fonts verified successfully");
                         return Ok(());
                     }
                 }
