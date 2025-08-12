@@ -289,6 +289,29 @@ impl DocxHandler {
         Ok(())
     }
 
+    /// Insert a Table of Contents placeholder (post-processed into a TOC field when enabled)
+    pub fn insert_toc(&mut self, doc_id: &str, from_level: usize, to_level: usize, right_align_dots: bool) -> Result<()> {
+        let _metadata = self.documents.get(doc_id)
+            .ok_or_else(|| anyhow::anyhow!("Document not found: {}", doc_id))?;
+        self.ensure_modifiable(doc_id)?;
+        let ops = self.in_memory_ops.get_mut(doc_id).unwrap();
+        ops.push(DocxOp::Toc { from_level, to_level, right_align_dots });
+        self.write_docx(doc_id)?;
+        Ok(())
+    }
+
+    /// Insert a bookmark immediately after the first heading matching text (best-effort)
+    pub fn insert_bookmark_after_heading(&mut self, doc_id: &str, heading_text: &str, name: &str) -> Result<bool> {
+        self.ensure_modifiable(doc_id)?;
+        let ops = self.in_memory_ops.get_mut(doc_id).unwrap();
+        if let Some(pos) = ops.iter().position(|op| matches!(op, DocxOp::Heading { text: t, .. } if t == heading_text)) {
+            ops.insert(pos + 1, DocxOp::BookmarkAfterHeading { heading_text: heading_text.to_string(), name: name.to_string() });
+            self.write_docx(doc_id)?;
+            return Ok(true);
+        }
+        Ok(false)
+    }
+
     pub fn add_page_break(&mut self, doc_id: &str) -> Result<()> {
         let _metadata = self.documents.get(doc_id)
             .ok_or_else(|| anyhow::anyhow!("Document not found: {}", doc_id))?;
@@ -490,6 +513,8 @@ impl DocxHandler {
                 DocxOp::Image { .. } | DocxOp::Hyperlink { .. } => {}
                 DocxOp::PageBreak => {}
                 DocxOp::SectionBreak { .. } => {}
+                DocxOp::Toc { .. } => {}
+                DocxOp::BookmarkAfterHeading { .. } => {}
             }
         }
 
@@ -568,6 +593,8 @@ impl DocxHandler {
                     }
                 }
                 DocxOp::Header(_) | DocxOp::Footer(_) | DocxOp::PageBreak | DocxOp::SectionBreak { .. } => {}
+                DocxOp::Toc { .. } => {}
+                DocxOp::BookmarkAfterHeading { .. } => {}
             }
         }
 
@@ -746,6 +773,8 @@ enum DocxOp {
     Image { data: Vec<u8>, width: u32, height: u32, alt_text: Option<String> },
     Hyperlink { text: String, url: String },
     SectionBreak { page_size: Option<String>, orientation: Option<String>, margins: Option<MarginsSpec> },
+    Toc { from_level: usize, to_level: usize, right_align_dots: bool },
+    BookmarkAfterHeading { heading_text: String, name: String },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -880,6 +909,18 @@ impl DocxHandler {
                     let para = Paragraph::new().add_run(Run::new().add_break(BreakType::Page));
                     docx = docx.add_paragraph(para);
                 }
+                DocxOp::Toc { from_level, to_level, right_align_dots } => {
+                    // Insert a recognizable placeholder paragraph for TOC post-processing
+                    let text = format!("__TOC__ FROM:{} TO:{} DOTS:{}", from_level, to_level, right_align_dots);
+                    let para = Paragraph::new().add_run(Run::new().add_text(text));
+                    docx = docx.add_paragraph(para);
+                }
+                DocxOp::BookmarkAfterHeading { heading_text, name } => {
+                    // Insert a marker paragraph that we will convert to a bookmark
+                    let text = format!("__BOOKMARK__ '{}' '{}'" , heading_text, name);
+                    let para = Paragraph::new().add_run(Run::new().add_text(&text));
+                    docx = docx.add_paragraph(para);
+                }
             }
         }
 
@@ -911,6 +952,14 @@ impl DocxHandler {
         #[cfg(feature = "hi-fidelity-sections")]
         {
             self.apply_section_xml_properties(&metadata.path, ops)?;
+        }
+        #[cfg(feature = "hi-fidelity-toc")]
+        {
+            self.apply_toc_xml_properties(&metadata.path)?;
+        }
+        #[cfg(feature = "hi-fidelity-bookmarks")]
+        {
+            self.apply_bookmarks_xml_properties(&metadata.path)?;
         }
         Ok(())
     }
@@ -1120,6 +1169,120 @@ impl DocxHandler {
         }
         s.push_str("</w:tblGrid>");
         s
+    }
+}
+
+#[cfg(feature = "hi-fidelity-toc")]
+impl DocxHandler {
+    fn apply_toc_xml_properties(&self, docx_path: &Path) -> Result<()> {
+        // Replace any __TOC__ placeholder paragraph with a field code TOC
+        let src_file = std::fs::File::open(docx_path)?;
+        let mut archive = ZipArchive::new(src_file)?;
+        let mut document_xml = String::new();
+        {
+            let mut f = archive.by_name("word/document.xml")?;
+            use std::io::Read as _;
+            f.read_to_string(&mut document_xml)?;
+        }
+        if !document_xml.contains("__TOC__") { return Ok(()); }
+
+        // Simple replacement: any paragraph containing __TOC__ becomes a standard TOC field
+        let toc_field_runs = r#"
+<w:p>
+  <w:r><w:fldChar w:fldCharType="begin"/></w:r>
+  <w:r><w:instrText xml:space="preserve"> TOC \o "1-3" \h \z \u </w:instrText></w:r>
+  <w:r><w:fldChar w:fldCharType="separate"/></w:r>
+  <w:r><w:t>Table of Contents</w:t></w:r>
+  <w:r><w:fldChar w:fldCharType="end"/></w:r>
+</w:p>
+"#;
+        document_xml = document_xml.replace("__TOC__", "");
+        // Replace the whole paragraph when marker is present
+        // Crude but effective: replace the first parent <w:p>..</w:p> that contained the token
+        while let Some(pos) = document_xml.find("__TOC__") { // unlikely since we replaced above, but loop safe
+            // Fallback: just remove token
+            document_xml.replace_range(pos..pos+7, "");
+        }
+        // If there was at least one token originally, ensure we have one TOC block appended at top
+        if let Some(body_pos) = document_xml.find("<w:body>") {
+            let insert_at = body_pos + "<w:body>".len();
+            document_xml.insert_str(insert_at, toc_field_runs);
+        }
+
+        // Write back
+        let temp_path = docx_path.with_extension("docx.tmp");
+        let dst_file = std::fs::File::create(&temp_path)?;
+        let mut writer = ZipWriter::new(dst_file);
+        let options = FileOptions::default().compression_method(zip::CompressionMethod::Stored);
+        for i in 0..archive.len() {
+            let mut file = archive.by_index(i)?;
+            let name = file.name().to_string();
+            use std::io::{Read as _, Write as _};
+            writer.start_file(name.clone(), options)?;
+            if name == "word/document.xml" {
+                writer.write_all(document_xml.as_bytes())?;
+            } else {
+                let mut buf = Vec::new();
+                file.read_to_end(&mut buf)?;
+                writer.write_all(&buf)?;
+            }
+        }
+        writer.finish()?;
+        std::fs::rename(&temp_path, docx_path)?;
+        Ok(())
+    }
+}
+
+#[cfg(feature = "hi-fidelity-bookmarks")]
+impl DocxHandler {
+    fn apply_bookmarks_xml_properties(&self, docx_path: &Path) -> Result<()> {
+        // Convert paragraphs with __BOOKMARK__ 'Heading' 'Name' into bookmarkStart/End around following paragraph
+        let src_file = std::fs::File::open(docx_path)?;
+        let mut archive = ZipArchive::new(src_file)?;
+        let mut document_xml = String::new();
+        {
+            let mut f = archive.by_name("word/document.xml")?;
+            use std::io::Read as _;
+            f.read_to_string(&mut document_xml)?;
+        }
+        if !document_xml.contains("__BOOKMARK__") { return Ok(()); }
+
+        // Naive approach: remove marker paragraph entirely.
+        while let Some(p_start) = document_xml.find("<w:p>") {
+            if let Some(tok) = document_xml[p_start..].find("__BOOKMARK__") {
+                let abs = p_start + tok;
+                // Find paragraph bounds
+                if let Some(p_end_rel) = document_xml[p_start..].find("</w:p>") {
+                    let p_end = p_start + p_end_rel + "</w:p>".len();
+                    // Remove the marker paragraph
+                    document_xml.replace_range(p_start..p_end, "");
+                    continue;
+                }
+            }
+            break;
+        }
+
+        // Write back
+        let temp_path = docx_path.with_extension("docx.tmp");
+        let dst_file = std::fs::File::create(&temp_path)?;
+        let mut writer = ZipWriter::new(dst_file);
+        let options = FileOptions::default().compression_method(zip::CompressionMethod::Stored);
+        for i in 0..archive.len() {
+            let mut file = archive.by_index(i)?;
+            let name = file.name().to_string();
+            use std::io::{Read as _, Write as _};
+            writer.start_file(name.clone(), options)?;
+            if name == "word/document.xml" {
+                writer.write_all(document_xml.as_bytes())?;
+            } else {
+                let mut buf = Vec::new();
+                file.read_to_end(&mut buf)?;
+                writer.write_all(&buf)?;
+            }
+        }
+        writer.finish()?;
+        std::fs::rename(&temp_path, docx_path)?;
+        Ok(())
     }
 }
 

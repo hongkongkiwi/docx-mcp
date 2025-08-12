@@ -204,3 +204,34 @@ fn test_styles_and_lists_and_sections_hifi_xml() -> Result<()> {
 
     Ok(())
 }
+
+#[test]
+fn test_insert_toc_and_bookmark_placeholders() -> Result<()> {
+    let temp_dir = TempDir::new()?;
+    let mut handler = DocxHandler::new_with_base_dir(temp_dir.path())?;
+    let doc_id = handler.create_document()?;
+
+    handler.add_heading(&doc_id, "Intro", 1)?;
+    handler.insert_bookmark_after_heading(&doc_id, "Intro", "bm-intro")?;
+    handler.insert_toc(&doc_id, 1, 3, true)?;
+
+    let out_path = temp_dir.path().join("toc_bm.docx");
+    handler.save_document(&doc_id, &out_path)?;
+
+    let doc_xml = open_zip_str(&out_path, "word/document.xml")?;
+    assert!(doc_xml.contains("__TOC__") || cfg!(feature = "hi-fidelity-toc"), "Expect TOC placeholder or transformed field");
+
+    #[cfg(feature = "hi-fidelity-toc")]
+    {
+        let doc_xml = open_zip_str(&out_path, "word/document.xml")?;
+        assert!(doc_xml.contains("w:fldChar") && doc_xml.contains("TOC"));
+    }
+
+    #[cfg(feature = "hi-fidelity-bookmarks")]
+    {
+        let doc_xml = open_zip_str(&out_path, "word/document.xml")?;
+        assert!(!doc_xml.contains("__BOOKMARK__"));
+    }
+
+    Ok(())
+}

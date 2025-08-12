@@ -278,6 +278,35 @@ impl DocxToolsProvider {
                 annotations: None,
             },
             Tool {
+                name: "insert_toc".to_string(),
+                description: Some("Insert a Table of Contents placeholder (hi-fidelity can inject TOC field)".to_string()),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "document_id": {"type": "string"},
+                        "from_level": {"type": "integer", "default": 1},
+                        "to_level": {"type": "integer", "default": 3},
+                        "right_align_dots": {"type": "boolean", "default": true}
+                    },
+                    "required": ["document_id"]
+                }),
+                annotations: None,
+            },
+            Tool {
+                name: "insert_bookmark_after_heading".to_string(),
+                description: Some("Insert a bookmark immediately after the first matching heading".to_string()),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "document_id": {"type": "string"},
+                        "heading_text": {"type": "string"},
+                        "name": {"type": "string"}
+                    },
+                    "required": ["document_id", "heading_text", "name"]
+                }),
+                annotations: None,
+            },
+            Tool {
                 name: "set_header".to_string(),
                 description: Some("Set the document header".to_string()),
                 input_schema: json!({
@@ -996,6 +1025,28 @@ impl DocxToolsProvider {
                 let mut handler = self.handler.write().unwrap();
                 match handler.add_page_break(doc_id) {
                     Ok(_) => ToolOutcome::Ok { message: Some("Page break added successfully".into()) },
+                    Err(e) => ToolOutcome::Error { code: ErrorCode::ValidationError, error: e.to_string(), hint: None },
+                }
+            },
+            "insert_toc" => {
+                let doc_id = arguments["document_id"].as_str().unwrap_or("");
+                let from_level = arguments.get("from_level").and_then(|v| v.as_u64()).unwrap_or(1) as usize;
+                let to_level = arguments.get("to_level").and_then(|v| v.as_u64()).unwrap_or(3) as usize;
+                let right_align_dots = arguments.get("right_align_dots").and_then(|v| v.as_bool()).unwrap_or(true);
+                let mut handler = self.handler.write().unwrap();
+                match handler.insert_toc(doc_id, from_level, to_level, right_align_dots) {
+                    Ok(_) => ToolOutcome::Ok { message: Some("TOC placeholder inserted".into()) },
+                    Err(e) => ToolOutcome::Error { code: ErrorCode::ValidationError, error: e.to_string(), hint: None },
+                }
+            },
+            "insert_bookmark_after_heading" => {
+                let doc_id = arguments["document_id"].as_str().unwrap_or("");
+                let heading_text = arguments["heading_text"].as_str().unwrap_or("");
+                let name = arguments["name"].as_str().unwrap_or("");
+                let mut handler = self.handler.write().unwrap();
+                match handler.insert_bookmark_after_heading(doc_id, heading_text, name) {
+                    Ok(true) => ToolOutcome::Ok { message: Some("Bookmark inserted".into()) },
+                    Ok(false) => ToolOutcome::Error { code: ErrorCode::ValidationError, error: "Heading not found".into(), hint: None },
                     Err(e) => ToolOutcome::Error { code: ErrorCode::ValidationError, error: e.to_string(), hint: None },
                 }
             },

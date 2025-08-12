@@ -113,6 +113,10 @@ hi-fidelity-tables = [] # enable XML injection for true table merges/widths
 hi-fidelity-sections = [] # enable XML injection for sectPr (page setup)
 hi-fidelity-styles = [] # enable XML injection for custom styles (e.g., TableHeader)
 hi-fidelity-lists = [] # enable XML injection for robust numbering definitions
+hi-fidelity-toc = [] # enable XML injection for Table of Contents field
+hi-fidelity-bookmarks = [] # enable XML injection for bookmarks
+hi-fidelity-comments = [] # enable XML injection for comments
+hi-fidelity-revisions = [] # enable XML injection for track changes settings
 
 [build-dependencies]
 anyhow = "1.0"
