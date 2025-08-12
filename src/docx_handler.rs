@@ -628,6 +628,165 @@ impl DocxHandler {
             .map(|m| m.clone())
     }
 
+    /// Update paragraph formatting for paragraphs matching the selector (currently supports substring match)
+    pub fn apply_paragraph_format(
+        &mut self,
+        doc_id: &str,
+        contains: Option<&str>,
+        new_format: DocxStyle,
+    ) -> Result<usize> {
+        self.ensure_modifiable(doc_id)?;
+        let ops = self.in_memory_ops.get_mut(doc_id)
+            .ok_or_else(|| anyhow::anyhow!("No in-memory ops for document: {}", doc_id))?;
+        let mut updated = 0usize;
+        for op in ops.iter_mut() {
+            if let DocxOp::Paragraph { text, style } = op {
+                if contains.map(|needle| text.contains(needle)).unwrap_or(true) {
+                    // Merge properties; prefer provided values over existing
+                    let mut merged = style.clone().unwrap_or(DocxStyle {
+                        font_family: None, font_size: None, bold: None, italic: None, underline: None,
+                        color: None, alignment: None, line_spacing: None,
+                    });
+                    if new_format.font_family.is_some() { merged.font_family = new_format.font_family.clone(); }
+                    if new_format.font_size.is_some() { merged.font_size = new_format.font_size; }
+                    if new_format.bold.is_some() { merged.bold = new_format.bold; }
+                    if new_format.italic.is_some() { merged.italic = new_format.italic; }
+                    if new_format.underline.is_some() { merged.underline = new_format.underline; }
+                    if new_format.color.is_some() { merged.color = new_format.color.clone(); }
+                    if new_format.alignment.is_some() { merged.alignment = new_format.alignment.clone(); }
+                    if new_format.line_spacing.is_some() { merged.line_spacing = new_format.line_spacing; }
+                    *style = Some(merged);
+                    updated += 1;
+                }
+            }
+        }
+        if updated > 0 { self.write_docx(doc_id)?; }
+        Ok(updated)
+    }
+
+    /// List tables with resolved merges and sizes
+    pub fn get_tables_json(&self, doc_id: &str) -> Result<serde_json::Value> {
+        let ops = self.in_memory_ops.get(doc_id)
+            .ok_or_else(|| anyhow::anyhow!("No in-memory ops for document: {}", doc_id))?;
+        let mut tables = Vec::new();
+        for (ti, op) in ops.iter().enumerate() {
+            if let DocxOp::Table { data } = op {
+                let rows = data.rows.len();
+                let cols = data.rows.first().map(|r| r.len()).unwrap_or(0);
+                tables.push(serde_json::json!({
+                    "index": ti,
+                    "rows": rows,
+                    "cols": cols,
+                    "col_widths": data.col_widths,
+                    "merges": data.merges,
+                    "cells": data.rows,
+                }));
+            }
+        }
+        Ok(serde_json::json!({ "tables": tables }))
+    }
+
+    /// List images with basic metadata
+    pub fn list_images(&self, doc_id: &str) -> Result<serde_json::Value> {
+        let ops = self.in_memory_ops.get(doc_id)
+            .ok_or_else(|| anyhow::anyhow!("No in-memory ops for document: {}", doc_id))?;
+        let mut images = Vec::new();
+        for (i, op) in ops.iter().enumerate() {
+            if let DocxOp::Image { width, height, alt_text, .. } = op {
+                images.push(serde_json::json!({"index": i, "width": width, "height": height, "alt_text": alt_text}));
+            }
+        }
+        Ok(serde_json::json!({"images": images}))
+    }
+
+    /// List hyperlinks present in the in-memory ops
+    pub fn list_hyperlinks(&self, doc_id: &str) -> Result<serde_json::Value> {
+        let ops = self.in_memory_ops.get(doc_id)
+            .ok_or_else(|| anyhow::anyhow!("No in-memory ops for document: {}", doc_id))?;
+        let mut links = Vec::new();
+        for (i, op) in ops.iter().enumerate() {
+            if let DocxOp::Hyperlink { text, url } = op {
+                links.push(serde_json::json!({"index": i, "text": text, "url": url}));
+            }
+        }
+        Ok(serde_json::json!({"hyperlinks": links}))
+    }
+
+    /// Summarize fields from document and header/footer XML (best-effort)
+    pub fn get_fields_summary(&self, doc_id: &str) -> Result<serde_json::Value> {
+        let metadata = self.documents.get(doc_id)
+            .ok_or_else(|| anyhow::anyhow!("Document not found: {}", doc_id))?;
+        let src_file = std::fs::File::open(&metadata.path)?;
+        let mut archive = ZipArchive::new(src_file)?;
+        let mut parts = vec!["word/document.xml".to_string()];
+        for i in 0..archive.len() {
+            let name = archive.by_index(i)?.name().to_string();
+            if (name.starts_with("word/header") || name.starts_with("word/footer")) && name.ends_with(".xml") {
+                parts.push(name);
+            }
+        }
+        let mut fields: Vec<serde_json::Value> = Vec::new();
+        for part in parts {
+            if let Ok(mut f) = archive.by_name(&part) {
+                let mut xml = String::new();
+                use std::io::Read as _;
+                f.read_to_string(&mut xml)?;
+                for cap in regex::Regex::new(r"<w:instrText[\s\S]*?>([\s\S]*?)</w:instrText>")?.captures_iter(&xml) {
+                    let instr = cap.get(1).map(|m| m.as_str().trim()).unwrap_or("").to_string();
+                    let kind = if instr.contains("TOC") { "TOC" } else if instr.contains("PAGE") { "PAGE" } else if instr.contains("NUMPAGES") { "NUMPAGES" } else { "OTHER" };
+                    fields.push(serde_json::json!({"part": part, "instruction": instr, "kind": kind}));
+                }
+            }
+        }
+        Ok(serde_json::json!({"fields": fields}))
+    }
+
+    /// Remove personal info (best-effort): clear in-memory metadata and scrub core.xml if present
+    pub fn strip_personal_info(&mut self, doc_id: &str) -> Result<()> {
+        let meta = self.documents.get_mut(doc_id)
+            .ok_or_else(|| anyhow::anyhow!("Document not found: {}", doc_id))?;
+        meta.author = None; meta.title = None; meta.subject = None;
+        // Try to scrub docProps/core.xml
+        let src_file = std::fs::File::open(&meta.path)?;
+        let mut archive = ZipArchive::new(src_file)?;
+        let mut core_xml: Option<String> = None;
+        if let Ok(mut f) = archive.by_name("docProps/core.xml") {
+            let mut xml = String::new();
+            use std::io::Read as _;
+            f.read_to_string(&mut xml)?;
+            // crude replacements
+            xml = regex::Regex::new(r"<dc:creator>.*?</dc:creator>")?.replace_all(&xml, "<dc:creator></dc:creator>").into_owned();
+            xml = regex::Regex::new(r"<cp:lastModifiedBy>.*?</cp:lastModifiedBy>")?.replace_all(&xml, "<cp:lastModifiedBy></cp:lastModifiedBy>").into_owned();
+            xml = regex::Regex::new(r"<dc:title>.*?</dc:title>")?.replace_all(&xml, "<dc:title></dc:title>").into_owned();
+            xml = regex::Regex::new(r"<dc:subject>.*?</dc:subject>")?.replace_all(&xml, "<dc:subject></dc:subject>").into_owned();
+            core_xml = Some(xml);
+        }
+        if core_xml.is_none() { return Ok(()); }
+        // Repack archive with updated core.xml
+        let src_file = std::fs::File::open(&meta.path)?;
+        let mut archive = ZipArchive::new(src_file)?;
+        let temp_path = meta.path.with_extension("docx.tmp");
+        let dst_file = std::fs::File::create(&temp_path)?;
+        let mut writer = ZipWriter::new(dst_file);
+        let options = FileOptions::default().compression_method(zip::CompressionMethod::Stored);
+        for i in 0..archive.len() {
+            let mut file = archive.by_index(i)?;
+            let name = file.name().to_string();
+            use std::io::{Read as _, Write as _};
+            writer.start_file(name.clone(), options)?;
+            if name == "docProps/core.xml" {
+                writer.write_all(core_xml.as_ref().unwrap().as_bytes())?;
+            } else {
+                let mut buf = Vec::new();
+                file.read_to_end(&mut buf)?;
+                writer.write_all(&buf)?;
+            }
+        }
+        writer.finish()?;
+        std::fs::rename(&temp_path, &meta.path)?;
+        Ok(())
+    }
+
     /// Update document core properties stored in our metadata (best-effort)
     pub fn set_document_properties(
         &mut self,

@@ -441,6 +441,32 @@ impl DocxToolsProvider {
                 annotations: None,
             },
             Tool {
+                name: "apply_paragraph_format".to_string(),
+                description: Some("Apply paragraph formatting to paragraphs matching a simple selector".to_string()),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "document_id": {"type": "string"},
+                        "contains": {"type": "string", "description": "Substring to match in paragraph text"},
+                        "format": {
+                            "type": "object",
+                            "properties": {
+                                "font_family": {"type": "string"},
+                                "font_size": {"type": "integer"},
+                                "bold": {"type": "boolean"},
+                                "italic": {"type": "boolean"},
+                                "underline": {"type": "boolean"},
+                                "color": {"type": "string"},
+                                "alignment": {"type": "string"},
+                                "line_spacing": {"type": "number"}
+                            }
+                        }
+                    },
+                    "required": ["document_id", "format"]
+                }),
+                annotations: None,
+            },
+            Tool {
                 name: "extract_text".to_string(),
                 description: Some("Extract all text content from the document".to_string()),
                 input_schema: json!({
@@ -451,6 +477,56 @@ impl DocxToolsProvider {
                             "description": "ID of the document"
                         }
                     },
+                    "required": ["document_id"]
+                }),
+                annotations: None,
+            },
+            Tool {
+                name: "get_tables".to_string(),
+                description: Some("List tables with dimensions, merges, and cell content".to_string()),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {"document_id": {"type": "string"}},
+                    "required": ["document_id"]
+                }),
+                annotations: None,
+            },
+            Tool {
+                name: "list_images".to_string(),
+                description: Some("List images with width/height and alt text".to_string()),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {"document_id": {"type": "string"}},
+                    "required": ["document_id"]
+                }),
+                annotations: None,
+            },
+            Tool {
+                name: "list_hyperlinks".to_string(),
+                description: Some("List hyperlinks in the document".to_string()),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {"document_id": {"type": "string"}},
+                    "required": ["document_id"]
+                }),
+                annotations: None,
+            },
+            Tool {
+                name: "get_fields_summary".to_string(),
+                description: Some("Summarize Word fields (PAGE, NUMPAGES, TOC) in document and headers/footers".to_string()),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {"document_id": {"type": "string"}},
+                    "required": ["document_id"]
+                }),
+                annotations: None,
+            },
+            Tool {
+                name: "strip_personal_info".to_string(),
+                description: Some("Remove personal info from metadata and core.xml (best-effort)".to_string()),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {"document_id": {"type": "string"}},
                     "required": ["document_id"]
                 }),
                 annotations: None,
@@ -1148,6 +1224,26 @@ impl DocxToolsProvider {
                     Err(e) => ToolOutcome::Error { code: ErrorCode::ValidationError, error: e.to_string(), hint: None },
                 }
             },
+            "apply_paragraph_format" => {
+                let doc_id = arguments["document_id"].as_str().unwrap_or("");
+                let contains = arguments.get("contains").and_then(|v| v.as_str());
+                let fmt = &arguments["format"];
+                let style = DocxStyle {
+                    font_family: fmt.get("font_family").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                    font_size: fmt.get("font_size").and_then(|v| v.as_u64()).map(|v| v as usize),
+                    bold: fmt.get("bold").and_then(|v| v.as_bool()),
+                    italic: fmt.get("italic").and_then(|v| v.as_bool()),
+                    underline: fmt.get("underline").and_then(|v| v.as_bool()),
+                    color: fmt.get("color").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                    alignment: fmt.get("alignment").and_then(|v| v.as_str()).map(|s| s.to_string()),
+                    line_spacing: fmt.get("line_spacing").and_then(|v| v.as_f64()).map(|v| v as f32),
+                };
+                let mut handler = self.handler.write().unwrap();
+                match handler.apply_paragraph_format(doc_id, contains, style) {
+                    Ok(count) => ToolOutcome::Ok { message: Some(format!("Updated {} paragraph(s)", count)) },
+                    Err(e) => ToolOutcome::Error { code: ErrorCode::ValidationError, error: e.to_string(), hint: None },
+                }
+            },
             
             "extract_text" => {
                 let doc_id = arguments["document_id"].as_str().unwrap_or("");
@@ -1156,6 +1252,46 @@ impl DocxToolsProvider {
                 match handler.extract_text(doc_id) {
                     Ok(text) => ToolOutcome::Text { text },
                     Err(e) => ToolOutcome::Error { code: ErrorCode::DocNotFound, error: e.to_string(), hint: None },
+                }
+            },
+            "get_tables" => {
+                let doc_id = arguments["document_id"].as_str().unwrap_or("");
+                let handler = self.handler.read().unwrap();
+                match handler.get_tables_json(doc_id) {
+                    Ok(json) => ToolOutcome::Metadata { metadata: json },
+                    Err(e) => ToolOutcome::Error { code: ErrorCode::DocNotFound, error: e.to_string(), hint: None },
+                }
+            },
+            "list_images" => {
+                let doc_id = arguments["document_id"].as_str().unwrap_or("");
+                let handler = self.handler.read().unwrap();
+                match handler.list_images(doc_id) {
+                    Ok(json) => ToolOutcome::Metadata { metadata: json },
+                    Err(e) => ToolOutcome::Error { code: ErrorCode::DocNotFound, error: e.to_string(), hint: None },
+                }
+            },
+            "list_hyperlinks" => {
+                let doc_id = arguments["document_id"].as_str().unwrap_or("");
+                let handler = self.handler.read().unwrap();
+                match handler.list_hyperlinks(doc_id) {
+                    Ok(json) => ToolOutcome::Metadata { metadata: json },
+                    Err(e) => ToolOutcome::Error { code: ErrorCode::DocNotFound, error: e.to_string(), hint: None },
+                }
+            },
+            "get_fields_summary" => {
+                let doc_id = arguments["document_id"].as_str().unwrap_or("");
+                let handler = self.handler.read().unwrap();
+                match handler.get_fields_summary(doc_id) {
+                    Ok(json) => ToolOutcome::Metadata { metadata: json },
+                    Err(e) => ToolOutcome::Error { code: ErrorCode::DocNotFound, error: e.to_string(), hint: None },
+                }
+            },
+            "strip_personal_info" => {
+                let doc_id = arguments["document_id"].as_str().unwrap_or("");
+                let mut handler = self.handler.write().unwrap();
+                match handler.strip_personal_info(doc_id) {
+                    Ok(_) => ToolOutcome::Ok { message: Some("Personal info stripped".into()) },
+                    Err(e) => ToolOutcome::Error { code: ErrorCode::InternalError, error: e.to_string(), hint: None },
                 }
             },
             
