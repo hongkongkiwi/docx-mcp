@@ -68,6 +68,14 @@ pub struct DocxHandler {
     in_memory_ops: std::collections::HashMap<String, Vec<DocxOp>>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "kind")]
+pub enum RangeId {
+    Paragraph { index: usize },
+    Heading { index: usize },
+    TableCell { table_index: usize, row: usize, col: usize },
+}
+
 impl DocxHandler {
     pub fn new() -> Result<Self> {
         let base = std::env::var_os("DOCX_MCP_TEMP").map(PathBuf::from).unwrap_or_else(|| std::env::temp_dir());
@@ -607,6 +615,129 @@ impl DocxHandler {
             "links": links,
             "styles": styles_used,
         }))
+    }
+
+    /// Outline with stable indices for headings (range_ids)
+    pub fn get_outline(&self, doc_id: &str) -> Result<serde_json::Value> {
+        let ops = self.in_memory_ops.get(doc_id)
+            .ok_or_else(|| anyhow::anyhow!("No in-memory ops for document: {}", doc_id))?;
+        let mut outline = Vec::new();
+        let mut heading_idx = 0usize;
+        for op in ops.iter() {
+            if let DocxOp::Heading { text, style } = op {
+                let level = style.chars().last().and_then(|c| c.to_digit(10)).map(|d| d as usize).unwrap_or(1);
+                outline.push(serde_json::json!({
+                    "text": text,
+                    "level": level,
+                    "range_id": RangeId::Heading { index: heading_idx }
+                }));
+                heading_idx += 1;
+            }
+        }
+        Ok(serde_json::json!({"outline": outline}))
+    }
+
+    /// Simple selector to ranges. Supported selectors:
+    /// - heading:'Text'
+    /// - paragraph[INDEX]
+    /// - table[T].cell[R,C]
+    pub fn get_ranges(&self, doc_id: &str, selector: &str) -> Result<Vec<RangeId>> {
+        let ops = self.in_memory_ops.get(doc_id)
+            .ok_or_else(|| anyhow::anyhow!("No in-memory ops for document: {}", doc_id))?;
+        let mut results = Vec::new();
+        if let Some(rest) = selector.strip_prefix("heading:") {
+            let needle = rest.trim().trim_matches('\'').trim_matches('"');
+            let mut idx = 0usize;
+            for op in ops.iter() {
+                if let DocxOp::Heading { text, .. } = op {
+                    if text == needle { results.push(RangeId::Heading { index: idx }); }
+                    idx += 1;
+                }
+            }
+            return Ok(results);
+        }
+        if let Some(start) = selector.strip_prefix("paragraph[") {
+            if let Some(endpos) = start.find(']') {
+                if let Ok(pi) = start[..endpos].parse::<usize>() {
+                    results.push(RangeId::Paragraph { index: pi });
+                    return Ok(results);
+                }
+            }
+        }
+        if let Some(start) = selector.strip_prefix("table[") {
+            if let Some(endt) = start.find(']') {
+                let t_str = &start[..endt];
+                if let Some(cell_part) = start[endt+1..].strip_prefix(".cell[") {
+                    if let Some(endc) = cell_part.find(']') {
+                        let coords = &cell_part[..endc];
+                        let mut it = coords.split(',');
+                        if let (Ok(ti), Some(rs), Some(cs)) = (
+                            t_str.parse::<usize>(),
+                            it.next(), it.next()
+                        ) {
+                            if let (Ok(r), Ok(c)) = (rs.trim().parse::<usize>(), cs.trim().parse::<usize>()) {
+                                results.push(RangeId::TableCell { table_index: ti, row: r, col: c });
+                                return Ok(results);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Ok(results)
+    }
+
+    /// Replace text in a given range id (paragraph or heading). For TableCell use set_table_cell_text
+    pub fn replace_range_text(&mut self, doc_id: &str, range: &RangeId, new_text: &str) -> Result<()> {
+        self.ensure_modifiable(doc_id)?;
+        let ops = self.in_memory_ops.get_mut(doc_id)
+            .ok_or_else(|| anyhow::anyhow!("No in-memory ops for document: {}", doc_id))?;
+        match range {
+            RangeId::Paragraph { index } => {
+                let mut para_idx = 0usize;
+                for op in ops.iter_mut() {
+                    if let DocxOp::Paragraph { text, .. } = op {
+                        if &para_idx == index { *text = new_text.to_string(); break; }
+                        para_idx += 1;
+                    }
+                }
+            }
+            RangeId::Heading { index } => {
+                let mut h_idx = 0usize;
+                for op in ops.iter_mut() {
+                    if let DocxOp::Heading { text, .. } = op {
+                        if &h_idx == index { *text = new_text.to_string(); break; }
+                        h_idx += 1;
+                    }
+                }
+            }
+            RangeId::TableCell { .. } => anyhow::bail!("Use set_table_cell_text for table cells"),
+        }
+        self.write_docx(doc_id)?;
+        Ok(())
+    }
+
+    /// Set table cell text by table index and coordinates
+    pub fn set_table_cell_text(&mut self, doc_id: &str, table_index: usize, row: usize, col: usize, text: &str) -> Result<()> {
+        self.ensure_modifiable(doc_id)?;
+        let ops = self.in_memory_ops.get_mut(doc_id)
+            .ok_or_else(|| anyhow::anyhow!("No in-memory ops for document: {}", doc_id))?;
+        let mut ti = 0usize;
+        for op in ops.iter_mut() {
+            if let DocxOp::Table { data } = op {
+                if ti == table_index {
+                    if row < data.rows.len() && col < data.rows[row].len() {
+                        data.rows[row][col] = text.to_string();
+                        self.write_docx(doc_id)?;
+                        return Ok(());
+                    } else {
+                        anyhow::bail!("Cell out of bounds");
+                    }
+                }
+                ti += 1;
+            }
+        }
+        anyhow::bail!("Table not found")
     }
 
     pub fn extract_text(&self, doc_id: &str) -> Result<String> {

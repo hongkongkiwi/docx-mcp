@@ -735,6 +735,46 @@ impl DocxToolsProvider {
                 annotations: None,
             },
             Tool {
+                name: "get_outline".to_string(),
+                description: Some("Return heading outline with range_ids".to_string()),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {"document_id": {"type": "string"}},
+                    "required": ["document_id"]
+                }),
+                annotations: None,
+            },
+            Tool {
+                name: "get_ranges".to_string(),
+                description: Some("Resolve a selector to range_ids (heading:'Text', paragraph[i], table[t].cell[r,c])".to_string()),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {"document_id": {"type": "string"}, "selector": {"type": "string"}},
+                    "required": ["document_id", "selector"]
+                }),
+                annotations: None,
+            },
+            Tool {
+                name: "replace_range_text".to_string(),
+                description: Some("Replace text in a paragraph/heading by range_id".to_string()),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {"document_id": {"type": "string"}, "range_id": {"type": "object"}, "text": {"type": "string"}},
+                    "required": ["document_id", "range_id", "text"]
+                }),
+                annotations: None,
+            },
+            Tool {
+                name: "set_table_cell_text".to_string(),
+                description: Some("Set text in a table cell by indices".to_string()),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {"document_id": {"type": "string"}, "table_index": {"type": "integer"}, "row": {"type": "integer"}, "col": {"type": "integer"}, "text": {"type": "string"}},
+                    "required": ["document_id", "table_index", "row", "col", "text"]
+                }),
+                annotations: None,
+            },
+            Tool {
                 name: "get_document_properties".to_string(),
                 description: Some("Get document properties (title, subject, author, timestamps)".to_string()),
                 input_schema: json!({
@@ -1450,6 +1490,51 @@ impl DocxToolsProvider {
                 match handler.analyze_structure(doc_id) {
                     Ok(summary) => ToolOutcome::Metadata { metadata: summary },
                     Err(e) => ToolOutcome::Error { code: ErrorCode::DocNotFound, error: e.to_string(), hint: None }
+                }
+            },
+            "get_outline" => {
+                let doc_id = arguments["document_id"].as_str().unwrap_or("");
+                let handler = self.handler.read().unwrap();
+                match handler.get_outline(doc_id) {
+                    Ok(outline) => ToolOutcome::Metadata { metadata: outline },
+                    Err(e) => ToolOutcome::Error { code: ErrorCode::DocNotFound, error: e.to_string(), hint: None },
+                }
+            },
+            "get_ranges" => {
+                let doc_id = arguments["document_id"].as_str().unwrap_or("");
+                let selector = arguments["selector"].as_str().unwrap_or("");
+                let handler = self.handler.read().unwrap();
+                match handler.get_ranges(doc_id, selector) {
+                    Ok(ranges) => ToolOutcome::Metadata { metadata: serde_json::json!({"ranges": ranges}) },
+                    Err(e) => ToolOutcome::Error { code: ErrorCode::DocNotFound, error: e.to_string(), hint: None },
+                }
+            },
+            "replace_range_text" => {
+                let doc_id = arguments["document_id"].as_str().unwrap_or("");
+                let range_id = arguments["range_id"].clone();
+                let text = arguments["text"].as_str().unwrap_or("");
+                let range: crate::docx_handler::RangeId = match serde_json::from_value(range_id) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        return CallToolResponse { content: vec![ToolResponseContent::Text(TextContent { content_type: "application/json".into(), text: serde_json::json!({"success": false, "code": ErrorCode::ValidationError, "error": format!("invalid range_id: {}", e)}).to_string(), annotations: None })], is_error: Some(true), meta: None };
+                    }
+                };
+                let mut handler = self.handler.write().unwrap();
+                match handler.replace_range_text(doc_id, &range, text) {
+                    Ok(_) => ToolOutcome::Ok { message: Some("Range text replaced".into()) },
+                    Err(e) => ToolOutcome::Error { code: ErrorCode::ValidationError, error: e.to_string(), hint: None },
+                }
+            },
+            "set_table_cell_text" => {
+                let doc_id = arguments["document_id"].as_str().unwrap_or("");
+                let ti = arguments["table_index"].as_u64().unwrap_or(0) as usize;
+                let r = arguments["row"].as_u64().unwrap_or(0) as usize;
+                let c = arguments["col"].as_u64().unwrap_or(0) as usize;
+                let text = arguments["text"].as_str().unwrap_or("");
+                let mut handler = self.handler.write().unwrap();
+                match handler.set_table_cell_text(doc_id, ti, r, c, text) {
+                    Ok(_) => ToolOutcome::Ok { message: Some("Table cell updated".into()) },
+                    Err(e) => ToolOutcome::Error { code: ErrorCode::ValidationError, error: e.to_string(), hint: None },
                 }
             },
             
