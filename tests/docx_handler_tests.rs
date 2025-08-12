@@ -94,6 +94,9 @@ fn test_add_table() {
         ],
         headers: Some(vec!["Name".to_string(), "Age".to_string(), "City".to_string()]),
         border_style: Some("single".to_string()),
+        col_widths: None,
+        merges: None,
+        cell_shading: None,
     };
     
     let result = handler.add_table(&doc_id, table_data);

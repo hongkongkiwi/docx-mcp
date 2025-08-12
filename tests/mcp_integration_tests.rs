@@ -533,6 +533,73 @@ async fn test_export_to_markdown() {
     }
 }
 
+#[tokio::test]
+async fn test_export_to_html() {
+    let (provider, temp_dir) = create_test_provider().await;
+    
+    let create_result = tool_result(&provider, "create_document", json!({})).await;
+    let doc_id = match create_result {
+        ToolResult::Success(value) => value["document_id"].as_str().unwrap().to_string(),
+        _ => panic!("Failed to create document"),
+    };
+    
+    // Add content
+    tool_result(&provider, "add_heading", json!({
+        "document_id": doc_id,
+        "text": "Test Document",
+        "level": 1
+    })).await;
+    tool_result(&provider, "add_paragraph", json!({
+        "document_id": doc_id,
+        "text": "This is a test paragraph."
+    })).await;
+    
+    // Export to HTML
+    let output_path = temp_dir.path().join("test_export.html");
+    let args = json!({
+        "document_id": doc_id,
+        "output_path": output_path.to_str().unwrap()
+    });
+    let result = tool_result(&provider, "export_to_html", args).await;
+    match result {
+        ToolResult::Success(value) => {
+            assert!(value["success"].as_bool().unwrap());
+            assert!(output_path.exists());
+            let html = std::fs::read_to_string(&output_path).unwrap();
+            assert!(html.contains("<h1>") || html.contains("<h2>") || html.contains("<p>"));
+        }
+        ToolResult::Error(e) => panic!("Expected success, got error: {}", e),
+    }
+}
+
+#[tokio::test]
+async fn test_get_storage_info_tool() {
+    let (provider, _temp_dir) = create_test_provider().await;
+    // Create a couple of docs to ensure some files exist
+    for _ in 0..2 {
+        let _ = tool_result(&provider, "create_document", json!({})).await;
+    }
+    let result = tool_result(&provider, "get_storage_info", json!({})).await;
+    match result {
+        ToolResult::Success(value) => {
+            assert!(value["success"].as_bool().unwrap());
+            let storage = &value["storage"];
+            assert!(storage["file_count"].is_number());
+            assert!(storage["total_bytes"].is_number());
+        }
+        ToolResult::Error(e) => panic!("get_storage_info failed: {}", e),
+    }
+}
+
+#[tokio::test]
+async fn test_list_tools_includes_new_exports() {
+    let (provider, _temp_dir) = create_test_provider().await;
+    let tools = provider.list_tools().await;
+    let names: Vec<_> = tools.iter().map(|t| t.name.clone()).collect();
+    assert!(names.contains(&"export_to_markdown".to_string()));
+    assert!(names.contains(&"export_to_html".to_string()));
+}
+
 // Parametrized test using rstest
 #[rstest]
 #[case("create_document", json!({}))]

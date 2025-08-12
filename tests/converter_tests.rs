@@ -25,6 +25,9 @@ fn setup_test_handler_with_content() -> (DocxHandler, String, TempDir) {
         ],
         headers: Some(vec!["Product".to_string(), "Price".to_string(), "Quantity".to_string()]),
         border_style: Some("single".to_string()),
+        col_widths: None,
+        merges: None,
+        cell_shading: None,
     };
     handler.add_table(&doc_id, table_data).unwrap();
     

@@ -21,7 +21,7 @@ impl DocumentConverter {
     pub fn new() -> Self {
         Self {
             pure_converter: PureRustConverter::new(),
-            prefer_external_tools: false, // Default to pure Rust implementation
+            prefer_external_tools: cfg!(feature = "hi-fidelity"), // Prefer external/hi-fi if feature enabled
         }
     }
 
@@ -44,6 +44,24 @@ impl DocumentConverter {
         // Use pure Rust implementation (default)
         self.pure_converter.docx_to_pdf_pure(docx_path, pdf_path)?;
         info!("Successfully converted DOCX to PDF using pure Rust implementation");
+        Ok(())
+    }
+
+    /// Convert with explicit preference overriding internal default
+    pub fn docx_to_pdf_with_preference(&self, docx_path: &Path, pdf_path: &Path, prefer_external: bool) -> Result<()> {
+        if prefer_external {
+            if self.try_libreoffice_conversion(docx_path, pdf_path).is_ok() {
+                info!("Successfully converted DOCX to PDF using LibreOffice (explicit preference)");
+                return Ok(());
+            }
+            if self.try_unoconv_conversion(docx_path, pdf_path).is_ok() {
+                info!("Successfully converted DOCX to PDF using unoconv (explicit preference)");
+                return Ok(());
+            }
+        }
+        // Fallback to pure implementation
+        self.pure_converter.docx_to_pdf_pure(docx_path, pdf_path)?;
+        info!("Successfully converted DOCX to PDF using pure Rust implementation (explicit preference)");
         Ok(())
     }
 
@@ -120,7 +138,7 @@ impl DocumentConverter {
         
         // Create a basic PDF with the extracted text
         let (doc, page1, layer1) = PdfDocument::new("Document", Mm(210.0), Mm(297.0), "Layer 1");
-        let current_layer = doc.get_page(page1).get_layer(layer1);
+        let _current_layer = doc.get_page(page1).get_layer(layer1);
         
         // Load a basic font
         let font = doc.add_builtin_font(BuiltinFont::Helvetica)?;
@@ -130,14 +148,13 @@ impl DocumentConverter {
         let mut y_position = Mm(280.0);
         let line_height = Mm(5.0);
         
+        let mut current_layer = doc.get_page(page1).get_layer(layer1);
         for line in lines {
             if y_position < Mm(20.0) {
-                // Add new page if needed
                 let (page, layer) = doc.add_page(Mm(210.0), Mm(297.0), "Page layer");
-                let current_layer = doc.get_page(page).get_layer(layer);
+                current_layer = doc.get_page(page).get_layer(layer);
                 y_position = Mm(280.0);
             }
-            
             current_layer.use_text(line, 12.0, Mm(10.0), y_position, &font);
             y_position -= line_height;
         }
@@ -340,6 +357,20 @@ impl DocumentConverter {
         // Then convert PDF to images
         let images = self.pdf_to_images(&temp_pdf, output_dir, format, dpi)?;
         
+        Ok(images)
+    }
+
+    pub fn docx_to_images_with_preference(
+        &self,
+        docx_path: &Path,
+        output_dir: &Path,
+        format: ImageFormat,
+        dpi: u32,
+        prefer_external: bool,
+    ) -> Result<Vec<PathBuf>> {
+        let temp_pdf = NamedTempFile::new()?.into_temp_path();
+        self.docx_to_pdf_with_preference(docx_path, &temp_pdf, prefer_external)?;
+        let images = self.pdf_to_images(&temp_pdf, output_dir, format, dpi)?;
         Ok(images)
     }
 

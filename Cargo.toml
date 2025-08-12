@@ -57,6 +57,7 @@ usvg = "0.44"  # SVG parsing
 pulldown-cmark = "0.12"  # Markdown parsing
 html5ever = "0.29"  # HTML parsing
 comrak = "0.28"  # CommonMark parsing
+html-escape = "0.2"
 
 # Text extraction from DOCX
 dotext = "0.1"
@@ -107,6 +108,11 @@ pure-rust-pdf = []
 external-tools = ["headless_chrome", "wkhtmltopdf"]
 full = ["embedded-fonts", "pure-rust-pdf", "external-tools", "tera"]
 build-bin = []
+hi-fidelity = [] # placeholder feature flag for high-fidelity rendering backends
+hi-fidelity-tables = [] # enable XML injection for true table merges/widths
+hi-fidelity-sections = [] # enable XML injection for sectPr (page setup)
+hi-fidelity-styles = [] # enable XML injection for custom styles (e.g., TableHeader)
+hi-fidelity-lists = [] # enable XML injection for robust numbering definitions
 
 [build-dependencies]
 anyhow = "1.0"

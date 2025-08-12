@@ -114,6 +114,9 @@ pub fn create_technical_report(handler: &mut DocxHandler) -> Result<String> {
         ],
         headers: Some(vec!["Service".to_string(), "Q3 2024 (ms)".to_string(), "Q4 2024 (ms)".to_string(), "Improvement".to_string()]),
         border_style: Some("single".to_string()),
+        col_widths: None,
+        merges: None,
+        cell_shading: None,
     };
     handler.add_table(&doc_id, response_time_data)?;
     
@@ -131,6 +134,9 @@ pub fn create_technical_report(handler: &mut DocxHandler) -> Result<String> {
         ],
         headers: Some(vec!["Metric".to_string(), "Target".to_string(), "Actual".to_string(), "Status".to_string()]),
         border_style: Some("single".to_string()),
+        col_widths: None,
+        merges: None,
+        cell_shading: None,
     };
     handler.add_table(&doc_id, reliability_data)?;
     
@@ -189,6 +195,9 @@ pub fn create_meeting_minutes(handler: &mut DocxHandler) -> Result<String> {
         ],
         headers: None,
         border_style: Some("single".to_string()),
+        col_widths: None,
+        merges: None,
+        cell_shading: None,
     };
     handler.add_table(&doc_id, meeting_details)?;
     
@@ -235,6 +244,9 @@ pub fn create_meeting_minutes(handler: &mut DocxHandler) -> Result<String> {
         ],
         headers: Some(vec!["Category".to_string(), "Budgeted".to_string(), "Actual".to_string(), "Remaining".to_string()]),
         border_style: Some("single".to_string()),
+        col_widths: None,
+        merges: None,
+        cell_shading: None,
     };
     handler.add_table(&doc_id, budget_data)?;
     
@@ -263,6 +275,9 @@ pub fn create_meeting_minutes(handler: &mut DocxHandler) -> Result<String> {
         ],
         headers: Some(vec!["Action Item".to_string(), "Owner".to_string(), "Due Date".to_string(), "Status".to_string()]),
         border_style: Some("single".to_string()),
+        col_widths: None,
+        merges: None,
+        cell_shading: None,
     };
     handler.add_table(&doc_id, action_items_data)?;
     
@@ -371,6 +386,9 @@ pub fn create_product_spec(handler: &mut DocxHandler) -> Result<String> {
         ],
         headers: Some(vec!["Requirement".to_string(), "Specification".to_string(), "Priority".to_string()]),
         border_style: Some("single".to_string()),
+        col_widths: None,
+        merges: None,
+        cell_shading: None,
     };
     handler.add_table(&doc_id, nfr_data)?;
     
@@ -502,6 +520,9 @@ pub fn create_formatted_document(handler: &mut DocxHandler) -> Result<String> {
         ],
         headers: Some(vec!["Item".to_string(), "Price".to_string(), "Discount".to_string(), "Final Price".to_string()]),
         border_style: Some("single".to_string()),
+        col_widths: None,
+        merges: None,
+        cell_shading: None,
     };
     handler.add_table(&doc_id, formatted_table)?;
     

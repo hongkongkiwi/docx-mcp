@@ -1,5 +1,6 @@
 pub mod security;
 pub mod fonts_cli;
+pub mod response;
 
 // Expose primary modules for tests and external use
 pub mod docx_tools;

@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use ::image::{DynamicImage, ImageFormat, Rgba, RgbaImage};
 use printpdf::*;
 use std::fs::{self, File};
-use std::io::{BufReader, BufWriter, Read};
+use std::io::{BufWriter, Read};
 use std::path::{Path, PathBuf};
 use tempfile::NamedTempFile;
 use tracing::{info};
@@ -297,7 +297,7 @@ impl PureRustConverter {
 
     /// Merge multiple PDFs using pure Rust
     pub fn merge_pdfs_pure(&self, pdf_paths: &[PathBuf], output_path: &Path) -> Result<()> {
-        use ::lopdf::{Document, Object, ObjectId};
+        use ::lopdf::{Document, Object};
         
         // Create a new document for merging
         let mut merged_doc = Document::with_version("1.5");
