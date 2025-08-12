@@ -41,24 +41,53 @@ impl PureRustConverter {
             anyhow::bail!("No document.xml found in DOCX file");
         }
         
-        // Parse XML and extract text
+        // Parse XML and extract text with basic whitespace semantics
         let doc = roxmltree::Document::parse(&document_xml)?;
         let mut text = String::new();
-        
-        // Extract text from all w:t elements
+        let mut last_char: Option<char> = None;
+
         for node in doc.descendants() {
-            if node.tag_name().name() == "t" {
-                if let Some(node_text) = node.text() {
-                    text.push_str(node_text);
-                    text.push(' ');
+            let name = node.tag_name().name();
+            match name {
+                // Paragraph boundary
+                "p" => {
+                    if !text.ends_with('\n') {
+                        text.push('\n');
+                        last_char = Some('\n');
+                    }
                 }
-            }
-            // Handle line breaks
-            if node.tag_name().name() == "br" || node.tag_name().name() == "p" {
-                text.push('\n');
+                // Text run
+                "t" => {
+                    if let Some(node_text) = node.text() {
+                        // Preserve spaces if xml:space="preserve"
+                        let preserve = node.attribute(("xml", "space")).map(|v| v == "preserve").unwrap_or(false);
+                        let mut content = node_text.to_string();
+                        if !preserve {
+                            // Collapse internal newlines and excessive spaces
+                            content = content.replace('\n', " ");
+                        }
+                        if !content.is_empty() {
+                            // Insert a space if needed between words
+                            if let Some(c) = last_char { if !c.is_whitespace() && !content.starts_with([' ', '\n', '\t']) { text.push(' '); } }
+                            text.push_str(&content);
+                            last_char = content.chars().rev().next();
+                        }
+                    }
+                }
+                // Line break
+                "br" => {
+                    text.push('\n');
+                    last_char = Some('\n');
+                }
+                // Tab
+                "tab" => {
+                    text.push('\t');
+                    last_char = Some('\t');
+                }
+                _ => {}
             }
         }
-        
+
         Ok(text.trim().to_string())
     }
 

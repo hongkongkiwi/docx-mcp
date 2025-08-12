@@ -306,6 +306,45 @@ impl DocxHandler {
     pub fn list_documents(&self) -> Vec<DocxMetadata> {
         self.documents.values().cloned().collect()
     }
+
+    pub fn temp_dir_path(&self) -> PathBuf {
+        self.temp_dir.clone()
+    }
+
+    pub fn get_storage_info(&self) -> Result<serde_json::Value> {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let mut total_bytes: u64 = 0;
+        let mut file_count: u64 = 0;
+        let mut oldest: Option<u64> = None;
+        let mut newest: Option<u64> = None;
+        if self.temp_dir.exists() {
+            for entry in walkdir::WalkDir::new(&self.temp_dir).into_iter().filter_map(|e| e.ok()) {
+                if entry.file_type().is_file() {
+                    file_count += 1;
+                    if let Ok(meta) = entry.metadata() {
+                        total_bytes = total_bytes.saturating_add(meta.len());
+                        if let Ok(modified) = meta.modified() {
+                            if let Ok(secs) = modified.duration_since(UNIX_EPOCH) {
+                                let ts = secs.as_secs();
+                                oldest = Some(oldest.map_or(ts, |o| o.min(ts)));
+                                newest = Some(newest.map_or(ts, |n| n.max(ts)));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        Ok(serde_json::json!({
+            "success": true,
+            "storage": {
+                "base_dir": self.temp_dir,
+                "file_count": file_count,
+                "total_bytes": total_bytes,
+                "oldest_modified": oldest,
+                "newest_modified": newest,
+            }
+        }))
+    }
 }
 
 #[derive(Debug, Clone)]

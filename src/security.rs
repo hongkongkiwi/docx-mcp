@@ -311,6 +311,7 @@ impl SecurityConfig {
         commands.insert("export_to_html");
         commands.insert("create_preview");
         commands.insert("get_security_info");
+        commands.insert("get_storage_info");
         
         commands
     }

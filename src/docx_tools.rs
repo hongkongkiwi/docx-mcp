@@ -2,7 +2,7 @@ use mcp_core::types::{Tool, CallToolResponse, ToolResponseContent, TextContent};
 // Adapt to latest MCP: we'll integrate via mcp-server Router separately
 use serde_json::{json, Value};
 use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, RwLock};
 use tracing::{debug, info};
 
 use crate::docx_handler::{DocxHandler, DocxStyle, TableData};
@@ -13,7 +13,7 @@ use crate::security::{SecurityConfig, SecurityMiddleware};
 
 #[derive(Clone)]
 pub struct DocxToolsProvider {
-    handler: Arc<Mutex<DocxHandler>>,
+    handler: Arc<RwLock<DocxHandler>>,
     converter: Arc<DocumentConverter>,
     #[cfg(feature = "advanced-docx")]
     advanced: Arc<AdvancedDocxHandler>,
@@ -28,7 +28,7 @@ impl DocxToolsProvider {
     
     pub fn new_with_security(security_config: SecurityConfig) -> Self {
         Self {
-            handler: Arc::new(Mutex::new(DocxHandler::new().expect("Failed to create DocxHandler"))),
+            handler: Arc::new(RwLock::new(DocxHandler::new().expect("Failed to create DocxHandler"))),
             converter: Arc::new(DocumentConverter::new()),
             #[cfg(feature = "advanced-docx")]
             advanced: Arc::new(AdvancedDocxHandler::new()),
@@ -45,7 +45,7 @@ impl DocxToolsProvider {
     /// Create a provider with a base directory and explicit security config
     pub fn with_base_dir_and_security<P: AsRef<std::path::Path>>(base_dir: P, security_config: SecurityConfig) -> Self {
         Self {
-            handler: Arc::new(Mutex::new(DocxHandler::new_with_base_dir(base_dir).expect("Failed to create DocxHandler"))),
+            handler: Arc::new(RwLock::new(DocxHandler::new_with_base_dir(base_dir).expect("Failed to create DocxHandler"))),
             converter: Arc::new(DocumentConverter::new()),
             #[cfg(feature = "advanced-docx")]
             advanced: Arc::new(AdvancedDocxHandler::new()),
@@ -547,6 +547,16 @@ impl DocxToolsProvider {
                 }),
                 annotations: None,
             },
+            Tool {
+                name: "get_storage_info".to_string(),
+                description: Some("Get information about temporary storage usage".to_string()),
+                input_schema: json!({
+                    "type": "object",
+                    "properties": {},
+                    "required": []
+                }),
+                annotations: None,
+            },
         ];
         
         // Filter tools based on security configuration
@@ -576,7 +586,7 @@ impl DocxToolsProvider {
         
         let result = match name {
             "create_document" => {
-                let mut handler = self.handler.lock().unwrap();
+                let mut handler = self.handler.write().unwrap();
                 match handler.create_document() {
                     Ok(doc_id) => json!({
                         "success": true,
@@ -592,7 +602,7 @@ impl DocxToolsProvider {
             
             "open_document" => {
                 let path = arguments["path"].as_str().unwrap_or("");
-                let mut handler = self.handler.lock().unwrap();
+                let mut handler = self.handler.write().unwrap();
                 match handler.open_document(&PathBuf::from(path)) {
                     Ok(doc_id) => json!({
                         "success": true,
@@ -614,7 +624,7 @@ impl DocxToolsProvider {
                     serde_json::from_value::<DocxStyle>(s.clone()).ok()
                 });
                 
-                let mut handler = self.handler.lock().unwrap();
+                let mut handler = self.handler.write().unwrap();
                 match handler.add_paragraph(doc_id, text, style) {
                     Ok(_) => json!({
                         "success": true,
@@ -632,7 +642,7 @@ impl DocxToolsProvider {
                 let text = arguments["text"].as_str().unwrap_or("");
                 let level = arguments["level"].as_u64().unwrap_or(1) as usize;
                 
-                let mut handler = self.handler.lock().unwrap();
+                let mut handler = self.handler.write().unwrap();
                 match handler.add_heading(doc_id, text, level) {
                     Ok(_) => json!({
                         "success": true,
@@ -679,7 +689,7 @@ impl DocxToolsProvider {
                     border_style,
                 };
                 
-                let mut handler = self.handler.lock().unwrap();
+                let mut handler = self.handler.write().unwrap();
                 match handler.add_table(doc_id, table_data) {
                     Ok(_) => json!({
                         "success": true,
@@ -705,7 +715,7 @@ impl DocxToolsProvider {
                     .and_then(|v| v.as_bool())
                     .unwrap_or(false);
                 
-                let mut handler = self.handler.lock().unwrap();
+                let mut handler = self.handler.write().unwrap();
                 match handler.add_list(doc_id, items, ordered) {
                     Ok(_) => json!({
                         "success": true,
@@ -722,7 +732,7 @@ impl DocxToolsProvider {
             "add_page_break" => {
                 let doc_id = arguments["document_id"].as_str().unwrap_or("");
                 
-                let mut handler = self.handler.lock().unwrap();
+                let mut handler = self.handler.write().unwrap();
                 match handler.add_page_break(doc_id) {
                     Ok(_) => json!({
                         "success": true,
@@ -739,7 +749,7 @@ impl DocxToolsProvider {
                 let doc_id = arguments["document_id"].as_str().unwrap_or("");
                 let text = arguments["text"].as_str().unwrap_or("");
                 
-                let mut handler = self.handler.lock().unwrap();
+                let mut handler = self.handler.write().unwrap();
                 match handler.set_header(doc_id, text) {
                     Ok(_) => json!({
                         "success": true,
@@ -756,7 +766,7 @@ impl DocxToolsProvider {
                 let doc_id = arguments["document_id"].as_str().unwrap_or("");
                 let text = arguments["text"].as_str().unwrap_or("");
                 
-                let mut handler = self.handler.lock().unwrap();
+                let mut handler = self.handler.write().unwrap();
                 match handler.set_footer(doc_id, text) {
                     Ok(_) => json!({
                         "success": true,
@@ -774,7 +784,7 @@ impl DocxToolsProvider {
                 let find_text = arguments["find_text"].as_str().unwrap_or("");
                 let replace_text = arguments["replace_text"].as_str().unwrap_or("");
                 
-                let mut handler = self.handler.lock().unwrap();
+                let mut handler = self.handler.write().unwrap();
                 match handler.find_and_replace(doc_id, find_text, replace_text) {
                     Ok(count) => json!({
                         "success": true,
@@ -791,7 +801,7 @@ impl DocxToolsProvider {
             "extract_text" => {
                 let doc_id = arguments["document_id"].as_str().unwrap_or("");
                 
-                let handler = self.handler.lock().unwrap();
+                let handler = self.handler.read().unwrap();
                 match handler.extract_text(doc_id) {
                     Ok(text) => json!({
                         "success": true,
@@ -807,7 +817,7 @@ impl DocxToolsProvider {
             "get_metadata" => {
                 let doc_id = arguments["document_id"].as_str().unwrap_or("");
                 
-                let handler = self.handler.lock().unwrap();
+                let handler = self.handler.read().unwrap();
                 match handler.get_metadata(doc_id) {
                     Ok(metadata) => json!({
                         "success": true,
@@ -824,7 +834,7 @@ impl DocxToolsProvider {
                 let doc_id = arguments["document_id"].as_str().unwrap_or("");
                 let output_path = arguments["output_path"].as_str().unwrap_or("");
                 
-                let handler = self.handler.lock().unwrap();
+                let handler = self.handler.read().unwrap();
                 match handler.save_document(doc_id, &PathBuf::from(output_path)) {
                     Ok(_) => json!({
                         "success": true,
@@ -840,7 +850,7 @@ impl DocxToolsProvider {
             "close_document" => {
                 let doc_id = arguments["document_id"].as_str().unwrap_or("");
                 
-                let mut handler = self.handler.lock().unwrap();
+                let mut handler = self.handler.write().unwrap();
                 match handler.close_document(doc_id) {
                     Ok(_) => json!({
                         "success": true,
@@ -854,7 +864,7 @@ impl DocxToolsProvider {
             },
             
             "list_documents" => {
-                let handler = self.handler.lock().unwrap();
+                let handler = self.handler.read().unwrap();
                 let documents = handler.list_documents();
                 json!({
                     "success": true,
@@ -866,7 +876,7 @@ impl DocxToolsProvider {
                 let doc_id = arguments["document_id"].as_str().unwrap_or("");
                 let output_path = arguments["output_path"].as_str().unwrap_or("");
                 
-                let handler = self.handler.lock().unwrap();
+                let handler = self.handler.read().unwrap();
                 let metadata = match handler.get_metadata(doc_id) {
                     Ok(m) => m,
                     Err(e) => return CallToolResponse { content: vec![ToolResponseContent::Text(TextContent { content_type: "text".into(), text: e.to_string(), annotations: None })], is_error: Some(true), meta: None },
@@ -894,7 +904,7 @@ impl DocxToolsProvider {
                     .and_then(|d| d.as_u64())
                     .unwrap_or(150) as u32;
                 
-                let handler = self.handler.lock().unwrap();
+                let handler = self.handler.read().unwrap();
                 let metadata = match handler.get_metadata(doc_id) {
                     Ok(m) => m,
                     Err(e) => return CallToolResponse { content: vec![ToolResponseContent::Text(TextContent { content_type: "text".into(), text: e.to_string(), annotations: None })], is_error: Some(true), meta: None },
@@ -927,7 +937,7 @@ impl DocxToolsProvider {
             "get_document_structure" => {
                 let doc_id = arguments["document_id"].as_str().unwrap_or("");
                 
-                let handler = self.handler.lock().unwrap();
+                let handler = self.handler.read().unwrap();
                 match handler.extract_text(doc_id) {
                     Ok(text) => {
                         // Analyze document structure from text
@@ -993,7 +1003,7 @@ impl DocxToolsProvider {
             "get_word_count" => {
                 let doc_id = arguments["document_id"].as_str().unwrap_or("");
                 
-                let handler = self.handler.lock().unwrap();
+                let handler = self.handler.read().unwrap();
                 match handler.extract_text(doc_id) {
                     Ok(text) => {
                         let words: Vec<&str> = text.split_whitespace().collect();
@@ -1028,7 +1038,7 @@ impl DocxToolsProvider {
                 let case_sensitive = arguments.get("case_sensitive").and_then(|v| v.as_bool()).unwrap_or(false);
                 let whole_word = arguments.get("whole_word").and_then(|v| v.as_bool()).unwrap_or(false);
                 
-                let handler = self.handler.lock().unwrap();
+                let handler = self.handler.read().unwrap();
                 match handler.extract_text(doc_id) {
                     Ok(text) => {
                         let search_text = if case_sensitive { text.clone() } else { text.to_lowercase() };
@@ -1071,7 +1081,7 @@ impl DocxToolsProvider {
                 let doc_id = arguments["document_id"].as_str().unwrap_or("");
                 let output_path = arguments["output_path"].as_str().unwrap_or("");
                 
-                let handler = self.handler.lock().unwrap();
+                let handler = self.handler.read().unwrap();
                 match handler.extract_text(doc_id) {
                     Ok(text) => {
                         // Simple conversion to Markdown - in full implementation would preserve formatting
@@ -1130,6 +1140,14 @@ impl DocxToolsProvider {
                         "write_commands": crate::security::SecurityConfig::get_write_commands().len()
                     }
                 })
+            },
+            
+            "get_storage_info" => {
+                let handler = self.handler.read().unwrap();
+                match handler.get_storage_info() {
+                    Ok(info) => info,
+                    Err(e) => json!({"success": false, "error": e.to_string()}),
+                }
             },
             
             _ => {
